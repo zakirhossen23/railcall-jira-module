@@ -30,10 +30,10 @@ import urllib.error
 def _creds():
     """Load Jira credentials from the vault (fall back to env vars)."""
     helpers = __rc_helpers__  # noqa: F821 (injected by the module loader)
-    # The manifest declares the credential provider as "zakirhossen23-jira",
+    # The manifest declares the credential provider as "edudzi-jira",
     # so Studio saves the integration under that name. Try it first, then
     # fall back to the short "jira" name in case it was saved that way.
-    entry = helpers["vault_get"]("zakirhossen23-jira")
+    entry = helpers["vault_get"]("edudzi-jira")
     if not isinstance(entry, dict):
         entry = helpers["vault_get"]("jira")
     if isinstance(entry, dict):
