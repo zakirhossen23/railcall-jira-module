@@ -1,0 +1,111 @@
+{
+  "id": "zakirhossen23/jira",
+  "name": "zakirhossen23-jira",
+  "version": "0.1.0",
+  "manifest_version": 2,
+  "publisher_pubkey": "2ff96ad24f196a80e02ff83a8e64c9eb3592433b37c086e573ba3e93ec985b8e",
+  "provider": "zakirhossen23-jira",
+  "description": "Jira Cloud adapter for RailCall. Creates, updates, searches, and transitions issues via the Jira REST API v3 using Basic Auth (email + API token). All writes are dry-run / approval-gated by RailCall. contest:2026Q3",
+  "credential_spec": {
+    "provider": "zakirhossen23-jira",
+    "category": "DevOps & Issue Tracking",
+    "name": "Jira Cloud (email + API token)",
+    "required": ["JIRA_DOMAIN", "JIRA_EMAIL", "JIRA_API_TOKEN"],
+    "optional": [],
+    "shape": "env",
+    "risk": "medium",
+    "read_write": "write"
+  },
+  "allowed_destinations": [
+    {
+      "provider": "zakirhossen23-jira",
+      "hosts": ["*.atlassian.net", "*.jira.com"]
+    }
+  ],
+  "commands": [
+    {
+      "id": "jira.createIssue",
+      "title": "Create a Jira issue",
+      "provider": "zakirhossen23-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "project_key": { "type": "string", "required": true, "description": "Project key, e.g. PROJ" },
+        "summary": { "type": "string", "required": true, "description": "Issue summary / title" },
+        "description": { "type": "string", "required": false, "description": "Plain-text description (converted to ADF)" },
+        "issue_type": { "type": "string", "required": false, "description": "Issue type name, defaults to Task" }
+      },
+      "output_schema": {
+        "id": "string",
+        "key": "string",
+        "self": "string"
+      }
+    },
+    {
+      "id": "jira.updateIssue",
+      "title": "Update a Jira issue's fields",
+      "provider": "zakirhossen23-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true, "description": "Issue key (PROJ-123) or numeric id" },
+        "summary": { "type": "string", "required": false },
+        "description": { "type": "string", "required": false }
+      },
+      "output_schema": {
+        "id_or_key": "string",
+        "updated": "boolean"
+      }
+    },
+    {
+      "id": "jira.searchIssues",
+      "title": "Search Jira issues (JQL)",
+      "provider": "zakirhossen23-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "jql": { "type": "string", "required": true, "description": "JQL query, e.g. project = \"PROJ\" ORDER BY created DESC" },
+        "fields": { "type": "array", "required": false, "description": "Fields to return (default: summary, status, assignee)" },
+        "max_results": { "type": "integer", "required": false }
+      },
+      "output_schema": {
+        "issues": "array",
+        "count": "number",
+        "next_page_token": "string",
+        "is_last": "boolean"
+      }
+    },
+    {
+      "id": "jira.transitionIssue",
+      "title": "Transition a Jira issue to a new status",
+      "provider": "zakirhossen23-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true },
+        "transition_id": { "type": "string", "required": true, "description": "Transition id, e.g. 31" }
+      },
+      "output_schema": {
+        "id_or_key": "string",
+        "transition_id": "string"
+      }
+    }
+  ],
+  "category": "Eng",
+  "python": true,
+  "dependencies": {
+    "requests": ">=2.25.0"
+  }
+}
