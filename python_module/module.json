@@ -9,7 +9,7 @@
   "credential_spec": {
     "provider": "zakirhossen23-jira",
     "category": "DevOps & Issue Tracking",
-    "name": "Jira Cloud (email + API token)",
+    "name": "zakirhossen23-jira",
     "required": [
       "JIRA_DOMAIN",
       "JIRA_EMAIL",
