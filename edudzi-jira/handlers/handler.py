@@ -7,15 +7,18 @@ Credential entry `jira` (saved via Studio → Integrations):
       "JIRA_API_TOKEN": "ATATT3..."
     }
 
-Four commands, one Basic-Auth token. All hit
+Ten commands, one Basic-Auth token. All hit
 https://<domain>/rest/api/3 with `Authorization: Basic <b64(email:token)>`.
 
 Notes:
   - searchIssues uses POST /rest/api/3/search/jql (the legacy GET /search was
     removed in 2025 — Atlassian CHANGE-2046). Pagination is token-based:
     nextPageToken / isLast, no `total`.
-  - updateIssue uses PUT /rest/api/3/issue/{key}. The runtime exposes no PUT
-    helper, so it uses urllib directly (stdlib only).
+  - updateIssue and assignUser use PUT /rest/api/3/issue/{key}(...). The runtime
+    exposes no PUT helper, so they use urllib directly (stdlib only).
+  - attachFile uses POST /rest/api/3/issue/{key}/attachments with a
+    multipart/form-data body and the `X-Atlassian-Token: no-check` header.
+    No upload helper is exposed, so it builds the body with stdlib urllib.
   - Every handler returns (output, artifact) — the shape the station's
     _flatten_module_result expects.
 """
@@ -25,6 +28,7 @@ import json
 import base64
 import urllib.request
 import urllib.error
+import urllib.parse
 
 
 def _creds():
@@ -125,6 +129,47 @@ def _request(method, path, payload=None):
             raise RuntimeError(f"network error: {e.reason}")
 
     raise RuntimeError(f"unsupported method: {method}")
+
+
+def _upload_multipart(path, file_name, file_bytes):
+    """POST a multipart/form-data upload (used by attachFile).
+
+    Builds the multipart body by hand with stdlib only — the runtime exposes no
+    upload/multipart helper. Jira's attachments endpoint requires the
+    `X-Atlassian-Token: no-check` header. Returns the parsed JSON body.
+    """
+    import uuid
+
+    boundary = "----railcall" + uuid.uuid4().hex
+    header = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'
+        "Content-Type: application/octet-stream\r\n"
+        "\r\n"
+    )
+    body = header.encode("utf-8") + file_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+    domain, email, token = _creds()
+    url = _base_url(domain) + path
+    headers = {
+        "Authorization": _auth_header(email, token),
+        "X-Atlassian-Token": "no-check",
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "Content-Length": str(len(body)),
+    }
+    req = urllib.request.Request(url, data=body, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return _parse(resp.read())
+    except urllib.error.HTTPError as e:
+        err = b""
+        try:
+            err = e.read()[:400]
+        except Exception:
+            pass
+        raise RuntimeError(f"HTTP {e.code}: {err.decode('utf-8', errors='replace')}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"network error: {e.reason}")
 
 
 def to_adf(description):
@@ -250,3 +295,157 @@ def jira_transitionIssue(inputs, stamp):
         "id_or_key": issue_id_or_key,
         "transition_id": transition_id,
     }, {"kind": "jira.transitionIssue"}
+
+
+def jira_getIssue(inputs, stamp):
+    """Get full details for a single Jira issue."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+
+    fields = inputs.get("fields")
+    path = f"/issue/{issue_id_or_key}"
+    if fields:
+        path += "?fields=" + ",".join(str(f) for f in fields)
+
+    data = _request("GET", path)
+    fields_data = data.get("fields", {}) or {}
+    status = fields_data.get("status") or {}
+    assignee = fields_data.get("assignee") or {}
+    return {
+        "ok": True,
+        "id": data.get("id", ""),
+        "key": data.get("key", ""),
+        "self": data.get("self", ""),
+        "summary": fields_data.get("summary"),
+        "status": status.get("name") if isinstance(status, dict) else None,
+        "assignee": assignee.get("displayName") if isinstance(assignee, dict) else None,
+        "fields": fields_data,
+    }, {"kind": "jira.getIssue"}
+
+
+def jira_addComment(inputs, stamp):
+    """Add a comment to a Jira issue."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    comment = (inputs.get("comment") or inputs.get("body") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+    if not comment:
+        raise RuntimeError("comment is required")
+
+    data = _request("POST", f"/issue/{issue_id_or_key}/comment", {"body": to_adf(comment)})
+    return {
+        "ok": True,
+        "id_or_key": issue_id_or_key,
+        "comment_id": data.get("id", ""),
+        "self": data.get("self", ""),
+        "created": data.get("created", ""),
+    }, {"kind": "jira.addComment"}
+
+
+def jira_assignUser(inputs, stamp):
+    """Assign a Jira issue to a user (by accountId or email)."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    account_id = (inputs.get("account_id") or inputs.get("accountId") or "").strip()
+    email = (inputs.get("email") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+    if not account_id and not email:
+        raise RuntimeError("assignee is required — provide account_id or email")
+
+    if not account_id and email:
+        # Resolve the user's accountId from their email via user search.
+        results = _request(
+            "GET",
+            f"/user/search?query={urllib.parse.quote(email)}&maxResults=1",
+        )
+        if not isinstance(results, list) or not results:
+            raise RuntimeError(f"no Jira user found for email: {email}")
+        account_id = str(results[0].get("accountId") or "").strip()
+        if not account_id:
+            raise RuntimeError(f"could not resolve accountId for email: {email}")
+
+    _request("PUT", f"/issue/{issue_id_or_key}/assignee", {"accountId": account_id})
+    return {
+        "ok": True,
+        "id_or_key": issue_id_or_key,
+        "account_id": account_id,
+    }, {"kind": "jira.assignUser"}
+
+
+def jira_attachFile(inputs, stamp):
+    """Upload a file (screenshot / document) to a Jira issue."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    file_name = (inputs.get("file_name") or inputs.get("filename") or "").strip()
+    file_content = inputs.get("file_content") or inputs.get("content") or ""
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+    if not file_name:
+        raise RuntimeError("file_name is required")
+    if not file_content:
+        raise RuntimeError("file_content is required")
+
+    if isinstance(file_content, str):
+        if inputs.get("file_is_base64"):
+            try:
+                file_bytes = base64.b64decode(file_content)
+            except Exception as e:
+                raise RuntimeError(f"file_content is not valid base64: {e}")
+        else:
+            file_bytes = file_content.encode("utf-8")
+    else:
+        file_bytes = bytes(file_content)
+
+    data = _upload_multipart(f"/issue/{issue_id_or_key}/attachments", file_name, file_bytes)
+    attachments = []
+    for a in data if isinstance(data, list) else []:
+        attachments.append({
+            "id": a.get("id", ""),
+            "filename": a.get("filename", ""),
+            "mimeType": a.get("mimeType", ""),
+            "content": a.get("content", ""),
+            "size": a.get("size"),
+        })
+    return {
+        "ok": True,
+        "id_or_key": issue_id_or_key,
+        "attachments": attachments,
+        "count": len(attachments),
+    }, {"kind": "jira.attachFile"}
+
+
+def jira_deleteIssue(inputs, stamp):
+    """Delete a Jira issue."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+
+    path = f"/issue/{issue_id_or_key}"
+    if inputs.get("delete_subtasks") or inputs.get("deleteSubtasks"):
+        path += "?deleteSubtasks=true"
+
+    _request("DELETE", path)
+    return {
+        "ok": True,
+        "id_or_key": issue_id_or_key,
+        "deleted": True,
+    }, {"kind": "jira.deleteIssue"}
+
+
+def jira_listIssueTypes(inputs, stamp):
+    """List all issue types available in Jira."""
+    data = _request("GET", "/issuetype")
+    issue_types = []
+    for t in data if isinstance(data, list) else []:
+        issue_types.append({
+            "id": t.get("id", ""),
+            "name": t.get("name", ""),
+            "description": t.get("description", ""),
+            "subtask": t.get("subtask", False),
+            "iconUrl": t.get("iconUrl", ""),
+        })
+    return {
+        "ok": True,
+        "issue_types": issue_types,
+        "count": len(issue_types),
+    }, {"kind": "jira.listIssueTypes"}

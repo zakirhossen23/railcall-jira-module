@@ -101,6 +101,119 @@
         "id_or_key": "string",
         "transition_id": "string"
       }
+    },
+    {
+      "id": "jira.getIssue",
+      "title": "Get Jira issue details",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true, "description": "Issue key (PROJ-123) or numeric id" },
+        "fields": { "type": "array", "required": false, "description": "Fields to return (default: all)" }
+      },
+      "output_schema": {
+        "id": "string",
+        "key": "string",
+        "summary": "string",
+        "status": "string",
+        "assignee": "string",
+        "fields": "object"
+      }
+    },
+    {
+      "id": "jira.addComment",
+      "title": "Add a comment to a Jira issue",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true },
+        "comment": { "type": "string", "required": true, "description": "Comment text (converted to ADF)" }
+      },
+      "output_schema": {
+        "comment_id": "string",
+        "created": "string",
+        "self": "string"
+      }
+    },
+    {
+      "id": "jira.assignUser",
+      "title": "Assign a Jira issue to a user",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true },
+        "account_id": { "type": "string", "required": false, "description": "Assignee Atlassian accountId" },
+        "email": { "type": "string", "required": false, "description": "Assignee email (resolved to accountId)" }
+      },
+      "output_schema": {
+        "id_or_key": "string",
+        "account_id": "string"
+      }
+    },
+    {
+      "id": "jira.attachFile",
+      "title": "Upload a file to a Jira issue",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true },
+        "file_name": { "type": "string", "required": true, "description": "Filename to attach, e.g. screenshot.png" },
+        "file_content": { "type": "string", "required": true, "description": "File contents (text or base64-encoded bytes)" },
+        "file_is_base64": { "type": "boolean", "required": false, "description": "Set true if file_content is base64" }
+      },
+      "output_schema": {
+        "attachments": "array",
+        "count": "number"
+      }
+    },
+    {
+      "id": "jira.deleteIssue",
+      "title": "Delete a Jira issue",
+      "provider": "edudzi-jira",
+      "risk": "high",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true },
+        "delete_subtasks": { "type": "boolean", "required": false, "description": "Also delete subtasks (default false)" }
+      },
+      "output_schema": {
+        "id_or_key": "string",
+        "deleted": "boolean"
+      }
+    },
+    {
+      "id": "jira.listIssueTypes",
+      "title": "List Jira issue types",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {},
+      "output_schema": {
+        "issue_types": "array",
+        "count": "number"
+      }
     }
   ],
   "category": "Eng",
