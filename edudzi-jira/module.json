@@ -3,7 +3,7 @@
   "name": "edudzi-jira",
   "version": "0.1.0",
   "manifest_version": 2,
-  "publisher_pubkey": "2ff96ad24f196a80e02ff83a8e64c9eb3592433b37c086e573ba3e93ec985b8e",
+  "publisher_pubkey": "546d605f7763ccd862d5d286b375047f638f1c1053c71540aa4c8b2f6ee66cbc",
   "provider": "edudzi-jira",
   "description": "Jira Cloud adapter for RailCall. Creates, updates, searches, and transitions issues via the Jira REST API v3 using Basic Auth (email + API token). All writes are dry-run / approval-gated by RailCall. contest:2026Q3",
   "credential_spec": {
