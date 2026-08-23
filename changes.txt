@@ -1,0 +1,89 @@
+railcall-jira-module — Round 1 contest review fixes
+====================================================
+Date: 2026-08-23
+Scope: address the five failure patterns from the RailCall marketplace
+Round 1 review (2026-07-27) so the module is ready for Round 2 re-review.
+
+Files changed (6)
+-----------------
+ M  README.md                        (+6 / -3)
+ D  edudzi-jira/.env.example         (removed, 11 lines)
+ M  edudzi-jira/handlers/handler.py  (+42 / -11)
+ M  edudzi-jira/manifest.json        (description rewritten)
+ M  edudzi-jira/module.json          (description rewritten, synced with manifest.json)
+ M  edudzi-jira/module.sig           (bundle re-signed)
+
+Fix 1 — Vault bypass (review pattern #1) — FIXED
+------------------------------------------------
+Before: _creds() fell back to os.getenv("JIRA_DOMAIN" / "JIRA_EMAIL" /
+JIRA_API_TOKEN") when the vault entry was missing. Process-env credential
+reads are visible in `ps auxe` and dumped in core files; marketplace review
+fails them.
+
+After: credentials are read from the RailCall vault ONLY via
+__rc_helpers__["vault_get"], trying "edudzi-jira" first, then "jira".
+Missing credentials raise a RuntimeError telling the user to configure the
+integration in Studio -> Integrations. The unused `import os` was removed.
+The misleading .env.example template was deleted for consistency.
+
+Fix 2 — Retrying writes without idempotency (pattern #2) — ALREADY CLEAN
+------------------------------------------------------------------------
+Audited: the handler contains no retry logic anywhere. A flaky network
+cannot create duplicate issues or comments. No change needed.
+
+Fix 3 — Missing mode / risk / id per command (pattern #3) — ALREADY CLEAN
+-------------------------------------------------------------------------
+Audited: all 10 commands in module.json declare namespaced id (jira.*),
+mode (read | write_requires_approval), and risk (low | medium | high).
+No change needed.
+
+Fix 4 — Exception swallowing that returns errors as data (pattern #4) — FIXED
+-----------------------------------------------------------------------------
+Before: helper-based HTTP calls (http_post_json / http_get_json /
+http_delete_json / http_patch_json) discarded the status code, so an error
+body flowed through as data — e.g. createIssue returned {"ok": true,
+"id": ""} on a 400.
+
+After: added _fail(status, body), wired into every helper branch of
+_request(). Any HTTP >= 400 now raises RuntimeError with the status and the
+parsed Jira error: field-level errors ("errors": {...}) are surfaced verbatim
+(e.g. 'issuetype: Specify a valid issue type') plus any errorMessages, so
+agents can self-correct. The PUT/urllib and multipart paths already raised
+and are unchanged. Exceptions bubble to the airlock — nothing is swallowed.
+
+Fix 5 — Description under 300 chars (pattern #5) — FIXED
+--------------------------------------------------------
+Before: 214 chars.
+
+After: 2,819 chars (target range 1,500-3,000), covering:
+  - what each of the 10 commands does, grouped read / write / destructive
+    with risk levels;
+  - who it's for (engineering teams wanting approval-gated Jira automation);
+  - quick-start (API token -> Studio Integrations vault entry ->
+    install -> listIssueTypes -> createIssue);
+  - error behavior (fail-loud, no write retries, project-specific issue
+    types).
+Written identically into manifest.json and module.json (verified equal).
+
+Re-sign & verification
+----------------------
+handler.py + both manifests changed, so the bundle signature was refreshed:
+
+  railcall market module sign edudzi-jira     # wrote new module.sig
+  railcall market module verify edudzi-jira   # result: signature valid
+                                              # v2 tree spec, 10 commands
+
+New module.sig (first line):
+  4a081813e04ed99a2bca32101fb70b1d4524d23cca83cc0814ce33a11e24f8d991eb61dca50bb5ce
+  4a64d98080b8b6265d08065ce7aee0d14d75838cf6042a0e
+
+README.md updates
+-----------------
+- Credentials section now documents vault-only auth (env-var fallback text
+  removed) with the rationale (ps auxe / core dumps).
+- Repository layout tree no longer lists .env.example.
+
+Ready for Round 2
+-----------------
+  railcall market publish edudzi-jira --type=module
+  then DM the contest channel when done.

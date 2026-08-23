@@ -23,7 +23,6 @@ Notes:
     _flatten_module_result expects.
 """
 
-import os
 import json
 import base64
 import urllib.request
@@ -32,7 +31,12 @@ import urllib.parse
 
 
 def _creds():
-    """Load Jira credentials from the vault (fall back to env vars)."""
+    """Load Jira credentials from the RailCall vault ONLY.
+
+    Contest review round 1 flagged env-var credential reads (visible in
+    `ps auxe`, dumped in core files) — auth must come from the vault,
+    never from os.environ / os.getenv.
+    """
     helpers = __rc_helpers__  # noqa: F821 (injected by the module loader)
     # The manifest declares the credential provider as "edudzi-jira",
     # so Studio saves the integration under that name. Try it first, then
@@ -40,23 +44,15 @@ def _creds():
     entry = helpers["vault_get"]("edudzi-jira")
     if not isinstance(entry, dict):
         entry = helpers["vault_get"]("jira")
+    domain = email = token = ""
     if isinstance(entry, dict):
         domain = str(entry.get("JIRA_DOMAIN") or entry.get("domain") or "").strip()
         email = str(entry.get("JIRA_EMAIL") or entry.get("email") or "").strip()
         token = str(entry.get("JIRA_API_TOKEN") or entry.get("api_token") or "").strip()
-    else:
-        domain = email = token = ""
-
-    if not domain:
-        domain = os.getenv("JIRA_DOMAIN", "").strip()
-    if not email:
-        email = os.getenv("JIRA_EMAIL", "").strip()
-    if not token:
-        token = os.getenv("JIRA_API_TOKEN", "").strip()
 
     if not domain or not email or not token:
         raise RuntimeError(
-            "Jira credentials missing — configure the `jira` integration "
+            "Jira credentials missing — configure the `edudzi-jira` integration "
             "(JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN) in Studio → Integrations."
         )
     return domain, email, token
@@ -84,6 +80,35 @@ def _parse(body):
         return {}
 
 
+def _fail(status, body):
+    """Raise on HTTP >= 400 so API errors never masquerade as data.
+
+    Contest review round 1: helper-based calls were discarding the status
+    code, so a 401/400 error body flowed through and e.g. createIssue
+    returned {"ok": True, "id": ""} on failure. Writes must fail loud.
+    Field-level errors ({"errors": {"issuetype": "..."}}) are surfaced
+    verbatim so agents can self-correct.
+    """
+    try:
+        status = int(status)
+    except (TypeError, ValueError):
+        return
+    if status < 400:
+        return
+    data = _parse(body)
+    parts = []
+    if isinstance(data, dict):
+        field_errors = data.get("errors")
+        if isinstance(field_errors, dict):
+            parts += [f"{k}: {v}" for k, v in field_errors.items()]
+        messages = data.get("errorMessages")
+        if isinstance(messages, list):
+            parts += [str(m) for m in messages]
+        if not parts and data:
+            parts.append(json.dumps(data)[:300])
+    raise RuntimeError(f"Jira HTTP {status}: " + ("; ".join(parts) or "unknown error"))
+
+
 def _request(method, path, payload=None):
     """Run an HTTP request against the Jira API.
 
@@ -98,15 +123,19 @@ def _request(method, path, payload=None):
 
     if method == "POST":
         status, body = helpers["http_post_json"](url, payload or {}, timeout=20, headers=headers)
+        _fail(status, body)
         return _parse(body)
     if method == "GET":
         status, body = helpers["http_get_json"](url, timeout=20, headers=headers)
+        _fail(status, body)
         return _parse(body)
     if method == "DELETE":
         status, body = helpers["http_delete_json"](url, timeout=20, headers=headers)
+        _fail(status, body)
         return _parse(body)
     if method == "PATCH":
         status, body = helpers["http_patch_json"](url, payload or {}, timeout=20, headers=headers)
+        _fail(status, body)
         return _parse(body)
     if method == "PUT":
         # No PUT helper exposed — use stdlib urllib directly.

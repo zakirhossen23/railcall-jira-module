@@ -47,9 +47,9 @@ In **Studio → Integrations**, add a credential entry named `jira`:
 | `JIRA_EMAIL` | `you@example.com` |
 | `JIRA_API_TOKEN` | `ATATT3...` |
 
-The handler reads the vault first (`edudzi-jira`, then `jira`), and falls back
-to env vars for local dev (see `edudzi-jira/.env.example`). Marketplace review
-requires vault-based auth — env vars are a dev-only fallback.
+Credentials are read from the RailCall vault **only** — never from process
+environment variables (vault reads keep tokens out of `ps auxe` and core dumps).
+The handler looks up `edudzi-jira` first, then `jira`.
 
 ## Verify (1 minute) (*Optional*)
 
@@ -115,7 +115,6 @@ edudzi-jira/
 ├── module.json          # same manifest, duplicate copy
 ├── module.sig           # Ed25519 signature over the bundle (v2 tree)
 ├── requirements.txt     # no external deps — stdlib only
-├── .env.example         # env var template
 └── handlers/
     ├── __init__.py
     └── handler.py       # all 10 command handlers + shared helpers
