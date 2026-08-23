@@ -1,9 +1,9 @@
 # edudzi-jira — RailCall Jira module
 
 A Python module for [RailCall](https://railcall.ai) that wraps the **Jira Cloud
-REST API v3**. Ten commands — create, update, search, transition, comment,
-assign, attach, delete, and read issues — all governed by RailCall's
-dry-run-first, approval-gated automation.
+REST API v3**. Seventeen commands — create, update, search, transition, comment,
+assign, attach, delete, and read issues, plus multi-step composites — all
+governed by RailCall's dry-run-first, approval-gated automation.
 
 **Install and use in ~5 minutes.**
 
@@ -20,7 +20,14 @@ dry-run-first, approval-gated automation.
 | `jira.assignUser` | Assign by accountId or email | medium |
 | `jira.attachFile` | Upload a file attachment | medium |
 | `jira.deleteIssue` | Delete an issue | high |
-| `jira.listIssueTypes` | List issue types | low |
+| `jira.listIssueTypes` | List instance-wide issue types | low |
+| `jira.getTransitions` | List valid transitions + ids for an issue | low |
+| `jira.listProjects` | List accessible projects | low |
+| `jira.getProjectIssueTypes` | List valid types for one project | low |
+| `jira.triageIssue` | **Composite:** fetch context → comment → optional transition | medium |
+| `jira.resolveWithNote` | **Composite:** closing note + transition in one approval | medium |
+| `jira.cloneIssue` | **Composite:** copy an issue into a new one | medium |
+| `jira.bulkTransitionFromJql` | **Composite:** transition every JQL match (per-issue outcomes) | high |
 
 ## Prerequisites
 
@@ -58,7 +65,7 @@ railcall doctor          # environment health
 railcall demo            # golden path: build → signed receipt → verify
 ```
 
-In Studio → Modules, `edudzi-jira` should show **loaded** with 10 commands.
+In Studio → Modules, `edudzi-jira` should show **loaded** with 17 commands.
 
 ## Use it (2 minutes)
 

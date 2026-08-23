@@ -87,3 +87,66 @@ Ready for Round 2
 -----------------
   railcall market publish edudzi-jira --type=module
   then DM the contest channel when done.
+
+
+============================================================
+ROUND 2 IMPROVEMENTS — v0.1.0 → v0.2.0 (2026-08-23)
+============================================================
+Driven by what scored in Round 2: composites (stripe's bill_client → 95,
+leader; zendesk "6 → 22 composites" → +48), command-surface expansion
+(linear 8 → 45), and closing functional holes.
+
+New commands: 10 → 17 (7 added)
+-------------------------------
+Discovery (read, low risk) — fills gaps that blocked our own writes:
+  jira.getTransitions        valid transitions + ids for an issue
+                             (transitionIssue previously had no way to
+                             discover ids)
+  jira.listProjects          accessible projects (/project/search)
+  jira.getProjectIssueTypes  valid types per project (createmeta — README
+                             used to tell users to curl this by hand)
+
+Composites (several API calls under ONE approval):
+  jira.triageIssue           fetch context → triage comment → optional
+                             transition            (medium, write-gated)
+  jira.resolveWithNote       closing note + transition in one approval
+                                                   (medium, write-gated)
+  jira.cloneIssue            copy issue into a new one (summary suffix,
+                             description, type)    (medium, write-gated)
+  jira.bulkTransitionFromJql transition every JQL match, cap 200/run,
+                             per-issue outcomes    (HIGH risk, write-gated)
+
+Composite safety design (keeps Round 1 rules intact)
+----------------------------------------------------
+- Writes inside composites are NEVER retried.
+- Mid-sequence failures raise loudly and state exactly which steps landed,
+  e.g. "triageIssue: comment '101' posted, but transition failed: ...".
+- Bulk reports per-issue outcomes explicitly ({transitioned: [...],
+  failed: [{key, error}]}); only the search itself raises.
+- All credentials still vault-only; all HTTP >= 400 still fail loud.
+
+Manifest updates (manifest.json + module.json kept identical)
+-------------------------------------------------------------
+- version 0.1.0 → 0.2.0
+- description rewritten compactly for 17 commands: 2,625 chars
+  (within the required 1,500–3,000 range)
+- 7 new command blocks with namespaced id / mode / risk on each
+
+Verification
+------------
+- handler↔manifest parity: 17 handlers ↔ 17 declared (exact match)
+- python3 -m py_compile handler.py: OK
+- railcall market module sign edudzi-jira   # re-signed
+- railcall market module verify edudzi-jira # ✓ signature valid
+                                            # v0.2.0, v2 tree, 17 commands
+
+README.md updates
+-----------------
+- intro + command table now list all 17 commands (composites marked)
+- "loaded with 17 commands" in the verify step
+
+Still open (P1/P2 from the Round 2 gap analysis)
+------------------------------------------------
+- Test suite → tests_url badge (pipedrive earned it at 77)
+- Platform bug report (+5 bonus, like stripe's spend-cap find)
+- Possible companion workflow listing

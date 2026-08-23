@@ -478,3 +478,281 @@ def jira_listIssueTypes(inputs, stamp):
         "issue_types": issue_types,
         "count": len(issue_types),
     }, {"kind": "jira.listIssueTypes"}
+
+
+# ---------------------------------------------------------------------------
+# Discovery commands — fill the gaps that blocked our own writes (Round 2:
+# transitionIssue needs a transition id, but nothing listed valid ids).
+# ---------------------------------------------------------------------------
+
+
+def jira_getTransitions(inputs, stamp):
+    """List valid transitions for an issue (ids usable by transitionIssue)."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+
+    data = _request("GET", f"/issue/{issue_id_or_key}/transitions")
+    transitions = []
+    for t in data.get("transitions", []) or []:
+        to_status = t.get("to") or {}
+        transitions.append({
+            "id": str(t.get("id", "")),
+            "name": t.get("name", ""),
+            "to_status": to_status.get("name", "") if isinstance(to_status, dict) else "",
+        })
+    return {
+        "ok": True,
+        "id_or_key": issue_id_or_key,
+        "transitions": transitions,
+        "count": len(transitions),
+    }, {"kind": "jira.getTransitions"}
+
+
+def jira_listProjects(inputs, stamp):
+    """List Jira projects accessible to the credential's account."""
+    data = _request("GET", "/project/search?maxResults=100")
+    rows = data.get("values", []) if isinstance(data, dict) else (data or [])
+    projects = []
+    for p in rows if isinstance(rows, list) else []:
+        projects.append({
+            "id": str(p.get("id", "")),
+            "key": p.get("key", ""),
+            "name": p.get("name", ""),
+            "style": p.get("style", ""),
+        })
+    return {
+        "ok": True,
+        "projects": projects,
+        "count": len(projects),
+    }, {"kind": "jira.listProjects"}
+
+
+def jira_getProjectIssueTypes(inputs, stamp):
+    """List valid issue types for one project (createmeta)."""
+    project_key = (inputs.get("project_key") or "").strip()
+    if not project_key:
+        raise RuntimeError("project_key is required")
+
+    data = _request(
+        "GET",
+        f"/issue/createmeta/{urllib.parse.quote(project_key)}/issuetypes",
+    )
+    rows = data.get("issueTypes") or data.get("values") or []
+    issue_types = []
+    for t in rows if isinstance(rows, list) else []:
+        issue_types.append({
+            "id": str(t.get("id", "")),
+            "name": t.get("name", ""),
+            "description": t.get("description", ""),
+            "subtask": t.get("subtask", False),
+        })
+    return {
+        "ok": True,
+        "project_key": project_key,
+        "issue_types": issue_types,
+        "count": len(issue_types),
+    }, {"kind": "jira.getProjectIssueTypes"}
+
+
+# ---------------------------------------------------------------------------
+# Composite commands — several API calls under ONE approval (the pattern that
+# scored highest in marketplace Round 2). Writes inside a composite are never
+# retried; a mid-sequence failure raises loudly and says which steps landed.
+# ---------------------------------------------------------------------------
+
+
+def jira_triageIssue(inputs, stamp):
+    """Composite: fetch an issue, post a triage comment, optionally transition."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    comment = (inputs.get("comment") or "").strip()
+    transition_id = (inputs.get("transition_id") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+    if not comment:
+        raise RuntimeError("comment is required")
+
+    # Step 1 — read context.
+    try:
+        issue = jira_getIssue({"issue_id_or_key": issue_id_or_key}, stamp)[0]
+    except RuntimeError as e:
+        raise RuntimeError(f"triageIssue failed at getIssue (nothing written): {e}")
+
+    # Step 2 — comment.
+    try:
+        commented = jira_addComment(
+            {"issue_id_or_key": issue_id_or_key, "comment": comment}, stamp
+        )[0]
+    except RuntimeError as e:
+        raise RuntimeError(f"triageIssue: issue fetched, but addComment failed: {e}")
+
+    # Step 3 — optional transition.
+    transitioned = False
+    if transition_id:
+        try:
+            jira_transitionIssue(
+                {"issue_id_or_key": issue_id_or_key, "transition_id": transition_id},
+                stamp,
+            )
+            transitioned = True
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"triageIssue: issue fetched and comment {commented.get('comment_id', '')!r} "
+                f"posted, but transition failed: {e}"
+            )
+
+    return {
+        "ok": True,
+        "id_or_key": issue_id_or_key,
+        "summary": issue.get("summary"),
+        "status_before": issue.get("status"),
+        "assignee": issue.get("assignee"),
+        "comment_id": commented.get("comment_id", ""),
+        "transitioned": transitioned,
+        "transition_id": transition_id or None,
+    }, {"kind": "jira.triageIssue"}
+
+
+def jira_resolveWithNote(inputs, stamp):
+    """Composite: add a closing note and transition in one approval."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    comment = (inputs.get("comment") or "").strip()
+    transition_id = (inputs.get("transition_id") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+    if not comment:
+        raise RuntimeError("comment is required")
+    if not transition_id:
+        raise RuntimeError("transition_id is required (discover ids via jira.getTransitions)")
+
+    try:
+        commented = jira_addComment(
+            {"issue_id_or_key": issue_id_or_key, "comment": comment}, stamp
+        )[0]
+    except RuntimeError as e:
+        raise RuntimeError(f"resolveWithNote failed at addComment (nothing written): {e}")
+
+    try:
+        jira_transitionIssue(
+            {"issue_id_or_key": issue_id_or_key, "transition_id": transition_id}, stamp
+        )
+    except RuntimeError as e:
+        raise RuntimeError(
+            f"resolveWithNote: comment {commented.get('comment_id', '')!r} posted, "
+            f"but transition failed: {e}"
+        )
+
+    return {
+        "ok": True,
+        "id_or_key": issue_id_or_key,
+        "comment_id": commented.get("comment_id", ""),
+        "transition_id": transition_id,
+        "resolved": True,
+    }, {"kind": "jira.resolveWithNote"}
+
+
+def jira_cloneIssue(inputs, stamp):
+    """Composite: copy an issue into a new one (summary, description, type)."""
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+    project_key = (inputs.get("project_key") or "").strip()
+    suffix = str(inputs.get("summary_suffix") or " (clone)")
+
+    try:
+        source = jira_getIssue({"issue_id_or_key": issue_id_or_key}, stamp)[0]
+    except RuntimeError as e:
+        raise RuntimeError(f"cloneIssue failed at getIssue (nothing created): {e}")
+
+    src_fields = source.get("fields") or {}
+    summary = str(source.get("summary") or "").strip()
+    if not summary:
+        raise RuntimeError(f"source issue {issue_id_or_key} has no summary to clone")
+    issuetype = (src_fields.get("issuetype") or {}).get("name") if isinstance(
+        src_fields.get("issuetype"), dict
+    ) else None
+
+    # Target project: explicit override, else the source issue's project.
+    target_project = project_key
+    if not target_project:
+        proj = src_fields.get("project")
+        target_project = proj.get("key", "") if isinstance(proj, dict) else ""
+
+    create_inputs = {
+        "project_key": target_project,
+        "summary": summary + suffix,
+        "description": src_fields.get("description") or "",
+    }
+    if not create_inputs["project_key"]:
+        raise RuntimeError(
+            "could not determine source project — pass project_key explicitly"
+        )
+    if issuetype:
+        create_inputs["issue_type"] = issuetype
+
+    try:
+        created = jira_createIssue(create_inputs, stamp)[0]
+    except RuntimeError as e:
+        raise RuntimeError(f"cloneIssue: source read OK, but createIssue failed: {e}")
+
+    return {
+        "ok": True,
+        "cloned_from": issue_id_or_key,
+        "id": created.get("id", ""),
+        "key": created.get("key", ""),
+        "self": created.get("self", ""),
+    }, {"kind": "jira.cloneIssue"}
+
+
+def jira_bulkTransitionFromJql(inputs, stamp):
+    """Composite: transition every issue matching a JQL (per-issue outcomes).
+
+    The search failing raises loudly. Individual transition failures are
+    reported per issue (never retried, never swallowed silently) so one bad
+    issue doesn't hide the other results.
+    """
+    jql = (inputs.get("jql") or "").strip()
+    transition_id = (inputs.get("transition_id") or "").strip()
+    if not jql:
+        raise RuntimeError("jql is required")
+    if not transition_id:
+        raise RuntimeError("transition_id is required (discover ids via jira.getTransitions)")
+    try:
+        max_results = int(inputs.get("max_results") or 50)
+    except (TypeError, ValueError):
+        max_results = 50
+    max_results = max(1, min(max_results, 200))
+
+    data = _request(
+        "POST",
+        "/search/jql",
+        {"jql": jql, "fields": ["status"], "maxResults": max_results},
+    )
+    keys = [
+        str(i.get("key", "")).strip()
+        for i in (data.get("issues", []) or [])
+        if str(i.get("key", "")).strip()
+    ]
+
+    transitioned, failed = [], []
+    for k in keys:
+        try:
+            _request(
+                "POST",
+                f"/issue/{k}/transitions",
+                {"transition": {"id": transition_id}},
+            )
+            transitioned.append(k)
+        except RuntimeError as e:
+            failed.append({"key": k, "error": str(e)[:300]})
+
+    return {
+        "ok": True,
+        "jql": jql,
+        "transition_id": transition_id,
+        "matched": len(keys),
+        "transitioned_count": len(transitioned),
+        "failed_count": len(failed),
+        "transitioned": transitioned,
+        "failed": failed,
+    }, {"kind": "jira.bulkTransitionFromJql"}

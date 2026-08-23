@@ -1,11 +1,11 @@
 {
   "id": "edudzi/jira",
   "name": "edudzi-jira",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "manifest_version": 2,
   "publisher_pubkey": "546d605f7763ccd862d5d286b375047f638f1c1053c71540aa4c8b2f6ee66cbc",
   "provider": "edudzi-jira",
-  "description": "Governed Jira Cloud automation for RailCall — ten commands covering the full issue lifecycle over the Jira REST API v3 (Basic Auth with an Atlassian API token stored in the RailCall vault; egress is allowlisted to *.atlassian.net and *.jira.com only).\n\nWHO IT'S FOR\nEngineering teams and solo developers who want an AI agent to run day-to-day Jira hygiene — triage, follow-up comments, status moves, assignment, evidence attachments — without handing out raw API credentials or letting writes happen unreviewed. Every mutating command is dry-run-first: RailCall previews the exact payload and requires explicit approval before anything touches your tracker, and each approved run produces a signed receipt.\n\nCOMMANDS (10)\nRead (low risk):\n- jira.getIssue — fetch one issue by key or numeric id (summary, status, assignee, full fields).\n- jira.searchIssues — JQL search via POST /rest/api/3/search/jql (the legacy GET /search was removed by Atlassian in 2025); token-based pagination (next_page_token / is_last), no total count.\n- jira.listIssueTypes — list issue types available in the instance, so agents pick valid types before creating.\nWrite (medium risk, approval-gated):\n- jira.createIssue — create an issue in a project; plain-text descriptions are auto-converted to Atlassian Document Format.\n- jira.updateIssue — edit summary and/or description of an existing issue.\n- jira.addComment — append a comment (also converted to ADF).\n- jira.transitionIssue — move an issue to a new status by transition id.\n- jira.assignUser — assign by Atlassian accountId or by email (resolved via /user/search).\n- jira.attachFile — upload an attachment (text or base64) with the required X-Atlassian-Token: no-check header.\nDestructive (high risk, approval-gated):\n- jira.deleteIssue — delete an issue, optionally including subtasks.\n\nQUICK START\n1. Create an API token: id.atlassian.com → Security → API tokens.\n2. In Studio → Integrations, add credential entry \"edudzi-jira\" (or \"jira\") with JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN. Credentials are read from the vault only — never from process environment variables.\n3. Install and open Studio: railcall market install edudzi-jira && railcall studio.\n4. Run jira.listIssueTypes to see valid types for your project, then jira.createIssue with {project_key: \"PROJ\", summary: \"Fix login bug\", issue_type: \"Bug\"} — approve the previewed payload and you get back {id, key, self}.\n\nERROR BEHAVIOR\nHTTP failures raise loudly and are never returned as data: field-level errors such as issuetype: \"Specify a valid issue type\" are surfaced verbatim so the agent can self-correct. Writes are never auto-retried, so a flaky network cannot create duplicate issues or comments. Note that issue types are project-specific — Jira Product Discovery projects accept only \"Idea\".\n\ncontest:2026Q3",
+  "description": "Governed Jira Cloud automation for RailCall — seventeen commands covering the full issue lifecycle plus multi-step composites, over the Jira REST API v3 (Basic Auth with an Atlassian API token stored in the RailCall vault; egress allowlisted to *.atlassian.net and *.jira.com).\n\nWHO IT'S FOR\nEngineering teams who want an AI agent to run day-to-day Jira hygiene — triage, follow-ups, status moves, assignment, attachments — without raw credentials or unreviewed writes. Every mutating command is dry-run-first: RailCall previews the exact payload and requires explicit approval; each approved run yields a signed receipt.\n\nREAD (low risk)\n- getIssue — one issue by key/id (summary, status, assignee, fields).\n- searchIssues — JQL via POST /search/jql (legacy GET /search removed 2025); token pagination, no total.\n- listIssueTypes — instance-wide types.\n- getTransitions — valid transitions + ids for an issue (feed these to transitionIssue).\n- listProjects — accessible projects.\n- getProjectIssueTypes — valid types for one project (createmeta).\n\nWRITE (medium risk, approval-gated)\n- createIssue — create; plain text auto-converted to ADF.\n- updateIssue — edit summary/description.\n- addComment — comment (ADF).\n- transitionIssue — move by transition id.\n- assignUser — by accountId or email (resolved via /user/search).\n- attachFile — upload text/base64 (X-Atlassian-Token: no-check).\n\nCOMPOSITES (several API calls under ONE approval)\n- triageIssue — fetch issue, post triage comment, optionally transition.\n- resolveWithNote — closing note + transition together.\n- cloneIssue — copy an issue into a new one (summary suffix, description, type).\n- bulkTransitionFromJql — transition every issue matching a JQL (cap 200); per-issue outcomes reported, never retried.\n\nDESTRUCTIVE (high risk, approval-gated)\n- deleteIssue — delete, optionally subtasks.\n\nQUICK START\n1. Token: id.atlassian.com → Security → API tokens.\n2. Studio → Integrations: entry \"edudzi-jira\" (or \"jira\") with JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN — vault-only, never env vars.\n3. railcall market install edudzi-jira && railcall studio.\n4. jira.listProjects → jira.getProjectIssueTypes → jira.createIssue {project_key, summary, issue_type}; discover ids via jira.getTransitions, then jira.transitionIssue.\n\nERROR BEHAVIOR\nHTTP >= 400 raises loudly, never returned as data; field errors surfaced verbatim (e.g. issuetype: Specify a valid issue type). Writes never auto-retry — a flaky network cannot create duplicates. Bulk reports per-item outcomes explicitly. Issue types are project-specific (Product Discovery accepts only \"Idea\").\n\ncontest:2026Q3",
   "credential_spec": {
     "provider": "edudzi-jira",
     "category": "DevOps & Issue Tracking",
@@ -213,6 +213,140 @@
       "output_schema": {
         "issue_types": "array",
         "count": "number"
+      }
+    },
+    {
+      "id": "jira.getTransitions",
+      "title": "List valid transitions for a Jira issue",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true, "description": "Issue key (PROJ-123) or numeric id" }
+      },
+      "output_schema": {
+        "transitions": "array",
+        "count": "number"
+      }
+    },
+    {
+      "id": "jira.listProjects",
+      "title": "List accessible Jira projects",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {},
+      "output_schema": {
+        "projects": "array",
+        "count": "number"
+      }
+    },
+    {
+      "id": "jira.getProjectIssueTypes",
+      "title": "List valid issue types for a Jira project",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "project_key": { "type": "string", "required": true, "description": "Project key, e.g. PROJ" }
+      },
+      "output_schema": {
+        "issue_types": "array",
+        "count": "number"
+      }
+    },
+    {
+      "id": "jira.triageIssue",
+      "title": "Triage a Jira issue: fetch context, comment, optionally transition (composite)",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true },
+        "comment": { "type": "string", "required": true, "description": "Triage note (converted to ADF)" },
+        "transition_id": { "type": "string", "required": false, "description": "Optional transition to apply after commenting (see jira.getTransitions)" }
+      },
+      "output_schema": {
+        "summary": "string",
+        "status_before": "string",
+        "assignee": "string",
+        "comment_id": "string",
+        "transitioned": "boolean"
+      }
+    },
+    {
+      "id": "jira.resolveWithNote",
+      "title": "Add a closing note and transition a Jira issue in one approval (composite)",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true },
+        "comment": { "type": "string", "required": true, "description": "Closing note (converted to ADF)" },
+        "transition_id": { "type": "string", "required": true, "description": "Transition id (see jira.getTransitions)" }
+      },
+      "output_schema": {
+        "comment_id": "string",
+        "transition_id": "string",
+        "resolved": "boolean"
+      }
+    },
+    {
+      "id": "jira.cloneIssue",
+      "title": "Clone a Jira issue into a new issue (composite)",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": { "type": "string", "required": true, "description": "Source issue to clone" },
+        "project_key": { "type": "string", "required": false, "description": "Target project; defaults to the source issue's project" },
+        "summary_suffix": { "type": "string", "required": false, "description": "Appended to the cloned summary (default ' (clone)')" }
+      },
+      "output_schema": {
+        "cloned_from": "string",
+        "id": "string",
+        "key": "string",
+        "self": "string"
+      }
+    },
+    {
+      "id": "jira.bulkTransitionFromJql",
+      "title": "Transition every issue matching a JQL query (composite, high risk)",
+      "provider": "edudzi-jira",
+      "risk": "high",
+      "mode": "write_requires_approval",
+      "requires": ["jira"],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "jql": { "type": "string", "required": true, "description": "JQL selecting the issues to transition" },
+        "transition_id": { "type": "string", "required": true, "description": "Transition applied to every matched issue (see jira.getTransitions)" },
+        "max_results": { "type": "integer", "required": false, "description": "Cap on issues processed per run (default 50, max 200)" }
+      },
+      "output_schema": {
+        "matched": "number",
+        "transitioned_count": "number",
+        "failed_count": "number",
+        "transitioned": "array",
+        "failed": "array"
       }
     }
   ],
