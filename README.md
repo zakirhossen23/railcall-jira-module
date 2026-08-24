@@ -122,7 +122,10 @@ edudzi-jira/
 ├── module.json          # same manifest, duplicate copy
 ├── module.sig           # Ed25519 signature over the bundle (v2 tree)
 ├── requirements.txt     # no external deps — stdlib only
-└── handlers/
+├── handlers/
+│   ├── __init__.py
+│   └── handler.py       # all 17 command handlers + shared helpers
+└── test/
     ├── __init__.py
-    └── handler.py       # all 10 command handlers + shared helpers
+    └── test_jira.py     # 63 unit tests — all 17 handlers + helpers
 ```

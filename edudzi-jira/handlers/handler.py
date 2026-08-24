@@ -1,4 +1,4 @@
-"""railcall/jira v0.1.0 — governed Jira Cloud issue operations.
+"""railcall/jira v0.2.0 — governed Jira Cloud issue operations.
 
 Credential entry `jira` (saved via Studio → Integrations):
     {
