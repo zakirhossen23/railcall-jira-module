@@ -1,13 +1,13 @@
 {
   "id": "edudzi/jira",
   "name": "edudzi-jira",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "manifest_version": 2,
   "publisher_pubkey": "546d605f7763ccd862d5d286b375047f638f1c1053c71540aa4c8b2f6ee66cbc",
   "provider": "edudzi-jira",
   "homepage": "https://github.com/zakirhossen23/railcall-jira-module",
   "tests_url": "https://github.com/zakirhossen23/railcall-jira-module/tree/main/edudzi-jira/test",
-  "description": "Governed Jira Cloud automation for RailCall — seventeen commands covering the full issue lifecycle plus multi-step composites, over the Jira REST API v3 (Basic Auth with an Atlassian API token stored in the RailCall vault; egress allowlisted to *.atlassian.net and *.jira.com).\n\nWHO IT'S FOR\nEngineering teams who want an AI agent to run day-to-day Jira hygiene — triage, follow-ups, status moves, assignment, attachments — without raw credentials or unreviewed writes. Every mutating command is dry-run-first: RailCall previews the exact payload and requires explicit approval; each approved run yields a signed receipt.\n\nREAD (low risk)\n- getIssue — one issue by key/id (summary, status, assignee, fields).\n- searchIssues — JQL via POST /search/jql (legacy GET /search removed 2025); token pagination, no total.\n- listIssueTypes — instance-wide types.\n- getTransitions — valid transitions + ids for an issue (feed these to transitionIssue).\n- listProjects — accessible projects.\n- getProjectIssueTypes — valid types for one project (createmeta).\n\nWRITE (medium risk, approval-gated)\n- createIssue — create; plain text auto-converted to ADF.\n- updateIssue — edit summary/description.\n- addComment — comment (ADF).\n- transitionIssue — move by transition id.\n- assignUser — by accountId or email (resolved via /user/search).\n- attachFile — upload text/base64 (X-Atlassian-Token: no-check).\n\nCOMPOSITES (several API calls under ONE approval)\n- triageIssue — fetch issue, post triage comment, optionally transition.\n- resolveWithNote — closing note + transition together.\n- cloneIssue — copy an issue into a new one (summary suffix, description, type).\n- bulkTransitionFromJql — transition every issue matching a JQL (cap 200); per-issue outcomes reported, never retried.\n\nDESTRUCTIVE (high risk, approval-gated)\n- deleteIssue — delete, optionally subtasks.\n\nQUICK START\n1. Token: id.atlassian.com → Security → API tokens.\n2. Studio → Integrations: entry \"edudzi-jira\" (or \"jira\") with JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN — vault-only, never env vars.\n3. railcall market install edudzi-jira && railcall studio.\n4. jira.listProjects → jira.getProjectIssueTypes → jira.createIssue {project_key, summary, issue_type}; discover ids via jira.getTransitions, then jira.transitionIssue.\n\nERROR BEHAVIOR\nHTTP >= 400 raises loudly, never returned as data; field errors surfaced verbatim (e.g. issuetype: Specify a valid issue type). Writes never auto-retry — a flaky network cannot create duplicates. Bulk reports per-item outcomes explicitly. Issue types are project-specific (Product Discovery accepts only \"Idea\").\n\ncontest:2026Q3",
+  "description": "Governed Jira Cloud automation for RailCall — thirty-one commands covering the full issue lifecycle, comments, labels, watchers, components, versions, issue links, changelogs, plus multi-step composites, over the Jira REST API v3 (Basic Auth with an Atlassian API token stored in the RailCall vault; egress allowlisted to *.atlassian.net and *.jira.com).\n\nWHO IT'S FOR\nEngineering teams who want an AI agent to run day-to-day Jira hygiene — triage, follow-ups, status moves, assignment, attachments, comments, labels, watchers — without raw credentials or unreviewed writes. Every mutating command is dry-run-first: RailCall previews the exact payload and requires explicit approval; each approved run yields a signed receipt.\n\nREAD (low risk)\n- getIssue — one issue by key/id (summary, status, assignee, fields).\n- searchIssues — JQL via POST /search/jql; token pagination, no total.\n- listIssueTypes — instance-wide types.\n- getTransitions — valid transitions + ids for an issue.\n- listProjects — accessible projects.\n- getProjectIssueTypes — valid types for one project (createmeta).\n- getChangelog — full change history for an issue.\n- getComments — all comments on an issue.\n- getWatchers — list watchers on an issue.\n- getComponents — project components.\n- getVersions — project versions.\n\nWRITE (medium risk, approval-gated)\n- createIssue — create; plain text auto-converted to ADF.\n- updateIssue — edit summary/description.\n- addComment — comment (ADF).\n- updateComment — edit an existing comment.\n- transitionIssue — move by transition id.\n- assignUser — by accountId or email.\n- attachFile — upload text/base64.\n- linkIssues — create a link between two issues.\n- addLabels — add labels to an issue.\n- addWatcher — add a watcher to an issue.\n- createComponent — create a project component.\n- createVersion — create a project version.\n\nCOMPOSITES (several API calls under ONE approval)\n- triageIssue — fetch context, comment, optional transition.\n- resolveWithNote — closing note + transition together.\n- cloneIssue — copy an issue into a new one.\n- bulkTransitionFromJql — transition every JQL match (per-issue outcomes).\n\nDESTRUCTIVE (high risk, approval-gated)\n- deleteIssue — delete, optionally subtasks.\n- deleteComment — delete a comment.\n- removeIssueLink — remove a link between issues.\n- removeWatcher — remove a watcher from an issue.\n\nQUICK START\n1. Token: id.atlassian.com → Security → API tokens.\n2. Studio → Integrations: add JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN.\n3. Install: railcall market install edudzi/jira\n4. Try: jira_listProjects → jira_createIssue → jira_getIssue\n\nERROR BEHAVIOR\n- Every HTTP >= 400 raises with field-level errors surfaced verbatim.\n- No write is ever retried — one shot, fail loud.\n- Issue types are project-specific; use getProjectIssueTypes to discover valid types.\n- Issue types are project-specific (Product Discovery accepts only \"Issue\").\n\ncontest:2026Q3",
   "credential_spec": {
     "provider": "edudzi-jira",
     "category": "DevOps & Issue Tracking",
@@ -537,11 +537,394 @@
         "transitioned": "array",
         "failed": "array"
       }
+    },
+    {
+      "id": "jira.getChangelog",
+      "title": "Get issue changelog",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": [
+        "jira"
+      ],
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        }
+      },
+      "output_schema": {
+        "changelog": "array"
+      }
+    },
+    {
+      "id": "jira.getComments",
+      "title": "Get issue comments",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": [
+        "jira"
+      ],
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        }
+      },
+      "output_schema": {
+        "comments": "array",
+        "count": "integer"
+      }
+    },
+    {
+      "id": "jira.updateComment",
+      "title": "Update a comment",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        },
+        "comment_id": {
+          "type": "string",
+          "required": true,
+          "description": "Comment ID to update"
+        },
+        "body": {
+          "type": "string",
+          "required": true,
+          "description": "New comment text (plain text → ADF)"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "comment_id": "string"
+      }
+    },
+    {
+      "id": "jira.deleteComment",
+      "title": "Delete a comment",
+      "provider": "edudzi-jira",
+      "risk": "high",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        },
+        "comment_id": {
+          "type": "string",
+          "required": true,
+          "description": "Comment ID to delete"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "deleted": "boolean"
+      }
+    },
+    {
+      "id": "jira.linkIssues",
+      "title": "Link two issues",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "inward_issue_key": {
+          "type": "string",
+          "required": true,
+          "description": "Source issue key"
+        },
+        "outward_issue_key": {
+          "type": "string",
+          "required": true,
+          "description": "Target issue key"
+        },
+        "link_type": {
+          "type": "string",
+          "required": true,
+          "description": "Link type name, e.g. Blocks, Relates, Clones"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "link_id": "string"
+      }
+    },
+    {
+      "id": "jira.removeIssueLink",
+      "title": "Remove an issue link",
+      "provider": "edudzi-jira",
+      "risk": "high",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "link_id": {
+          "type": "string",
+          "required": true,
+          "description": "Issue link ID to remove"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "deleted": "boolean"
+      }
+    },
+    {
+      "id": "jira.getWatchers",
+      "title": "Get issue watchers",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": [
+        "jira"
+      ],
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        }
+      },
+      "output_schema": {
+        "watchers": "array",
+        "count": "integer"
+      }
+    },
+    {
+      "id": "jira.addWatcher",
+      "title": "Add a watcher",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        },
+        "account_id": {
+          "type": "string",
+          "required": true,
+          "description": "Atlassian account ID of the watcher"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "account_id": "string"
+      }
+    },
+    {
+      "id": "jira.removeWatcher",
+      "title": "Remove a watcher",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        },
+        "account_id": {
+          "type": "string",
+          "required": true,
+          "description": "Atlassian account ID of the watcher"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "deleted": "boolean"
+      }
+    },
+    {
+      "id": "jira.getComponents",
+      "title": "Get project components",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": [
+        "jira"
+      ],
+      "input_schema": {
+        "project_key": {
+          "type": "string",
+          "required": true,
+          "description": "Project key"
+        }
+      },
+      "output_schema": {
+        "components": "array",
+        "count": "integer"
+      }
+    },
+    {
+      "id": "jira.createComponent",
+      "title": "Create a project component",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "project_key": {
+          "type": "string",
+          "required": true,
+          "description": "Project key"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "description": "Component name"
+        },
+        "description": {
+          "type": "string",
+          "required": false,
+          "description": "Component description"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "id": "string",
+        "name": "string"
+      }
+    },
+    {
+      "id": "jira.getVersions",
+      "title": "Get project versions",
+      "provider": "edudzi-jira",
+      "risk": "low",
+      "mode": "read",
+      "requires": [
+        "jira"
+      ],
+      "input_schema": {
+        "project_key": {
+          "type": "string",
+          "required": true,
+          "description": "Project key"
+        }
+      },
+      "output_schema": {
+        "versions": "array",
+        "count": "integer"
+      }
+    },
+    {
+      "id": "jira.createVersion",
+      "title": "Create a project version",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "project_key": {
+          "type": "string",
+          "required": true,
+          "description": "Project key"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "description": "Version name"
+        },
+        "description": {
+          "type": "string",
+          "required": false,
+          "description": "Version description"
+        },
+        "release_date": {
+          "type": "string",
+          "required": false,
+          "description": "Release date (YYYY-MM-DD)"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "id": "string",
+        "name": "string"
+      }
+    },
+    {
+      "id": "jira.addLabels",
+      "title": "Add labels to an issue",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        },
+        "labels": {
+          "type": "array",
+          "required": true,
+          "description": "Labels to add"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "labels": "array"
+      }
     }
   ],
   "category": "Eng",
   "python": true,
   "dependencies": {
     "requests": ">=2.25.0"
-  }
+  },
+  "module_dependency": {
+    "id": "railcall/core",
+    "min_version": "1.0.0"
+  },
+  "max_spend_cents": 0
 }

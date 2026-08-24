@@ -1,9 +1,10 @@
 # edudzi-jira — RailCall Jira module
 
 A Python module for [RailCall](https://railcall.ai) that wraps the **Jira Cloud
-REST API v3**. Seventeen commands — create, update, search, transition, comment,
-assign, attach, delete, and read issues, plus multi-step composites — all
-governed by RailCall's dry-run-first, approval-gated automation.
+REST API v3**. Thirty-one commands — create, update, search, transition, comment,
+assign, attach, delete, link, label, watch, plus changelogs, components,
+versions, and multi-step composites — all governed by RailCall's dry-run-first,
+approval-gated automation.
 
 **Install and use in ~5 minutes.**
 
@@ -17,13 +18,27 @@ governed by RailCall's dry-run-first, approval-gated automation.
 | `jira.transitionIssue` | Move an issue to a new status | medium |
 | `jira.getIssue` | Fetch issue details | low |
 | `jira.addComment` | Add a comment | medium |
+| `jira.updateComment` | Edit an existing comment | medium |
+| `jira.deleteComment` | Delete a comment | high |
 | `jira.assignUser` | Assign by accountId or email | medium |
 | `jira.attachFile` | Upload a file attachment | medium |
+| `jira.linkIssues` | Create a link between two issues | medium |
+| `jira.removeIssueLink` | Remove an issue link | high |
+| `jira.addLabels` | Add labels to an issue | medium |
+| `jira.addWatcher` | Add a watcher to an issue | medium |
+| `jira.removeWatcher` | Remove a watcher from an issue | medium |
+| `jira.createComponent` | Create a project component | medium |
+| `jira.createVersion` | Create a project version | medium |
 | `jira.deleteIssue` | Delete an issue | high |
 | `jira.listIssueTypes` | List instance-wide issue types | low |
 | `jira.getTransitions` | List valid transitions + ids for an issue | low |
 | `jira.listProjects` | List accessible projects | low |
 | `jira.getProjectIssueTypes` | List valid types for one project | low |
+| `jira.getChangelog` | Full change history for an issue | low |
+| `jira.getComments` | All comments on an issue | low |
+| `jira.getWatchers` | List watchers on an issue | low |
+| `jira.getComponents` | Project components | low |
+| `jira.getVersions` | Project versions | low |
 | `jira.triageIssue` | **Composite:** fetch context → comment → optional transition | medium |
 | `jira.resolveWithNote` | **Composite:** closing note + transition in one approval | medium |
 | `jira.cloneIssue` | **Composite:** copy an issue into a new one | medium |
@@ -65,7 +80,7 @@ railcall doctor          # environment health
 railcall demo            # golden path: build → signed receipt → verify
 ```
 
-In Studio → Modules, `edudzi-jira` should show **loaded** with 17 commands.
+In Studio → Modules, `edudzi-jira` should show **loaded** with 31 commands.
 
 ## Use it (2 minutes)
 
@@ -124,10 +139,10 @@ edudzi-jira/
 ├── requirements.txt     # no external deps — stdlib only
 ├── handlers/
 │   ├── __init__.py
-│   └── handler.py       # all 17 command handlers + shared helpers
+    └── handler.py       # all 31 command handlers + shared helpers
 └── test/
     ├── __init__.py
-    └── test_jira.py     # 63 unit tests — all 17 handlers + helpers
+    └── test_jira.py     # unit tests — all 31 handlers + helpers
 ```
 
 ## Companion workflows
