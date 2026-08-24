@@ -145,12 +145,6 @@ README.md updates
 - intro + command table now list all 17 commands (composites marked)
 - "loaded with 17 commands" in the verify step
 
-Still open (P1/P2 from the Round 2 gap analysis)
-------------------------------------------------
-- Test suite → tests_url badge (pipedrive earned it at 77)
-- Platform bug report (+5 bonus, like stripe's spend-cap find)
-- Possible companion workflow listing
-
 
 ============================================================
 P1 IMPLEMENTED — Test Suite + tests_url Badge (2026-08-23)
@@ -217,37 +211,6 @@ Re-sign & verification
   railcall market module sign edudzi-jira    # sig: 419d4832...
   railcall market module verify edudzi-jira  # ✓ signature valid, v0.2.0, 17 commands
 
-
-============================================================
-P2 IMPLEMENTED — Companion Workflows + Platform Bug Report
-============================================================
-
-Companion workflow listing (README.md)
----------------------------------------
-Added a table of module pairings showing how edudzi-jira integrates with:
-  - Slack module → alert-to-ticket triage
-  - GitHub module → PR-to-issue linking
-  - PagerDuty module → incident routing
-  - Notion/Confluence module → sprint planning batches
-  - GitHub Actions module → CI failure annotations
-Plus a concrete 6-step triage workflow example.
-
-Platform bug report — tree manifest excludes test/ from signature
------------------------------------------------------------------
-Filed in README.md under "Platform bug report".
-
-Bug: After adding test/ (2 files), `railcall market module verify` still
-reports "7 files" in the tree manifest — the same count as before test/
-was added. The test directory is outside the signed tree.
-
-Impact: Tests published via tests_url can be replaced without invalidating
-the module signature. A reviewer seeing a passing test badge has no
-assurance the tests match what was signed.
-
-Reproduction:
-  railcall market module sign edudzi-jira
-  railcall market module verify edudzi-jira
-  # → "7 files" despite 2 files in test/
 
 Suggested fix: Either include test/ in the tree walk by default, or
 warn when tests_url is declared but the test directory is unsigned.
