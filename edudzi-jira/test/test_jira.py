@@ -191,7 +191,7 @@ class TestToAdf(unittest.TestCase):
         doc = h.to_adf("Hello world")
         self.assertEqual(len(doc["content"]), 1)
         self.assertEqual(doc["content"][0]["type"], "paragraph")
-        self.assertEqual(
+        self.assertEqual( 
             doc["content"][0]["content"][0]["text"], "Hello world"
         )
 

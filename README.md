@@ -129,3 +129,58 @@ edudzi-jira/
     ├── __init__.py
     └── test_jira.py     # 63 unit tests — all 17 handlers + helpers
 ```
+
+## Companion workflows
+
+`edudzi-jira` is designed to work alongside other RailCall modules:
+
+| Module | Pairing |
+|--------|---------|
+| `edudzi/jira` + **Slack module** | Triage alert in Slack → `jira_createIssue` opens a ticket; `jira_addComment` posts updates back |
+| `edudzi/jira` + **GitHub module** | `jira_cloneIssue` links PRs to tickets; `jira_resolveWithNote` closes issues when PRs merge |
+| `edudzi/jira` + **PagerDuty module** | Incident fires → `jira_createIssue` with high priority → `jira_assignUser` routes to on-call |
+| `edudzi/jira` + **Notion/Confluence module** | Sprint planning in Notion → `jira_bulkTransitionFromJql` moves issues in batch |
+| `edudzi/jira` + **GitHub Actions module** | CI fails → webhook → `jira_addComment` with failure logs on the linked ticket |
+
+Example triage workflow:
+
+```
+1.  Slack alert fires (#incidents channel)
+2.  AI agent runs jira_getProjectIssueTypes → picks "Incident"
+3.  jira_createIssue creates a high-priority incident ticket
+4.  jira_assignUser routes it to the on-call engineer
+5.  jira_triageIssue adds a triage note + moves to "In Progress"
+6.  When resolved: jira_resolveWithNote closes the loop
+```
+
+## Platform bug report
+
+**Bug: tree manifest excludes `test/` from signature — tests are unsigned.**
+
+After adding `edudzi-jira/test/` (with `__init__.py` + `test_jira.py`), running
+`railcall market module sign` and `railcall market module verify` still reports
+**7 files** in the tree manifest — the same count as before the test files were
+added. This means the `test/` directory is **outside the signed tree**.
+
+**Impact:** A malicious actor (or a compromised build) could replace test files
+without invalidating the module signature. If tests are published alongside the
+module (via `tests_url`), a reviewer seeing a passing test badge would have no
+assurance the tests on disk match what was signed.
+
+**Reproduction:**
+
+```bash
+# In the edudzi-jira/ directory:
+railcall market module sign edudzi-jira
+railcall market module verify edudzi-jira
+#   → reports "7 files" even though edudzi-jira/test/ contains 2 files
+```
+
+**Expected behavior:** Either `module sign` should include `test/` in the tree
+manifest (9 files), or `module verify` should warn when `tests_url` is declared
+but the test directory is unsigned.
+
+**Suggested fix:** In the signing logic, expand the file-walk to include `test/`
+by default (or document which directories are included/excluded in the v2 tree
+spec). If the intent is to exclude tests, `module verify` should emit a warning
+when `tests_url` is present in the manifest.
