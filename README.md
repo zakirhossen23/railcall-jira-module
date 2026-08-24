@@ -129,3 +129,26 @@ edudzi-jira/
     ├── __init__.py
     └── test_jira.py     # 63 unit tests — all 17 handlers + helpers
 ```
+
+## Companion workflows
+
+`edudzi-jira` is designed to work alongside other RailCall modules:
+
+| Module | Pairing |
+|--------|---------|
+| `edudzi/jira` + **Slack module** | Triage alert in Slack → `jira_createIssue` opens a ticket; `jira_addComment` posts updates back |
+| `edudzi/jira` + **GitHub module** | `jira_cloneIssue` links PRs to tickets; `jira_resolveWithNote` closes issues when PRs merge |
+| `edudzi/jira` + **PagerDuty module** | Incident fires → `jira_createIssue` with high priority → `jira_assignUser` routes to on-call |
+| `edudzi/jira` + **Notion/Confluence module** | Sprint planning in Notion → `jira_bulkTransitionFromJql` moves issues in batch |
+| `edudzi/jira` + **GitHub Actions module** | CI fails → webhook → `jira_addComment` with failure logs on the linked ticket |
+
+Example triage workflow:
+
+```
+1.  Slack alert fires (#incidents channel)
+2.  AI agent runs jira_getProjectIssueTypes → picks "Incident"
+3.  jira_createIssue creates a high-priority incident ticket
+4.  jira_assignUser routes it to the on-call engineer
+5.  jira_triageIssue adds a triage note + moves to "In Progress"
+6.  When resolved: jira_resolveWithNote closes the loop
+```
