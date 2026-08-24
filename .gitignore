@@ -3,3 +3,4 @@ node_modules/
 *.log
 .DS_Store
 coverage/
+railcall-publisher-seed-546d605f.json
