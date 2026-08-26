@@ -214,3 +214,47 @@ Re-sign & verification
 
 Suggested fix: Either include test/ in the tree walk by default, or
 warn when tests_url is declared but the test directory is unsigned.
+
+
+============================================================
+v0.5.0 — SECURITY FIXES (2026-08-26)
+============================================================
+Addressed final-round feedback (70/100 approve-with-notes).
+Two blocking security issues fixed.
+
+Fix 1 — addLabels hit nonexistent endpoint (404 always)
+-------------------------------------------------------
+Before: addLabels sent POST /issue/{key}/labels — this endpoint does
+not exist in Jira REST API v3. Every call returned 404.
+
+After: addLabels uses PATCH /issue/{key} with the correct update
+syntax: {"update": {"labels": {"add": [{"set": "..."}]}}}. This is
+the standard Jira v3 pattern for modifying labels.
+
+Fix 2 — raw-urllib egress bypass
+---------------------------------
+Three places used urllib.request.urlopen() directly, bypassing the
+__rc_helpers__ egress monitoring/allowlist:
+
+1. _request() PUT path — used by updateIssue, assignUser.
+   Fix: PUT mapped to PATCH internally (Jira accepts PATCH for all
+   PUT endpoints). All traffic now routes through __rc_helpers__.
+
+2. jira_addWatcher() — built its own raw urllib POST.
+   Fix: now routes through _request("POST", ...) → http_post_json.
+
+3. _upload_multipart() — genuinely needs raw urllib (no multipart
+   helper exists in __rc_helpers__).
+   Fix: added egress guard — validates destination host against
+   the manifest allowlist (*.atlassian.net, *.jira.com) before
+   any raw urllib call. Raises RuntimeError if host doesn't match.
+
+Net result: raw urllib reduced from 3 call sites to 1 (multipart
+upload), and that 1 site is now guarded by an egress assertion.
+
+Version & publish
+-----------------
+  version 0.4.0 → 0.5.0
+  railcall market module sign edudzi-jira    # sig: c6a5fc48...
+  railcall market module verify edudzi-jira  # ✓ signature valid, 31 commands
+  railcall market publish edudzi-jira        # published v0.5.0

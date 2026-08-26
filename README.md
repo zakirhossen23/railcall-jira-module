@@ -121,6 +121,10 @@ Output: `{ "id": "10001", "key": "PROJ-1", "self": "https://..." }`
   `issuetype: Specify a valid issue type`, not a generic message.
 - **File uploads** need the `X-Atlassian-Token: no-check` header and a
   `multipart/form-data` body — built by hand with stdlib `urllib`.
+- **Egress safety.** All HTTP routes through `__rc_helpers__` (POST, GET,
+  DELETE, PATCH) except file uploads, which use stdlib `urllib` with a
+  defense-in-depth egress assertion that validates the destination host
+  against `*.atlassian.net` and `*.jira.com` before sending.
 
 
 ## Uninstall
