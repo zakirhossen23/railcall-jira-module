@@ -1,7 +1,7 @@
 {
   "id": "edudzi/jira",
   "name": "edudzi-jira",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "manifest_version": 2,
   "publisher_pubkey": "546d605f7763ccd862d5d286b375047f638f1c1053c71540aa4c8b2f6ee66cbc",
   "provider": "edudzi-jira",
