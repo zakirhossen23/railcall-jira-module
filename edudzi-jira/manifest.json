@@ -1,13 +1,15 @@
 {
   "id": "edudzi/jira",
   "name": "edudzi-jira",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "manifest_version": 2,
   "publisher_pubkey": "546d605f7763ccd862d5d286b375047f638f1c1053c71540aa4c8b2f6ee66cbc",
   "provider": "edudzi-jira",
   "homepage": "https://github.com/zakirhossen23/railcall-jira-module",
   "tests_url": "https://github.com/zakirhossen23/railcall-jira-module/tree/main/edudzi-jira/test",
-  "description": "Governed Jira Cloud automation for RailCall — thirty-one commands covering the full issue lifecycle, comments, labels, watchers, components, versions, issue links, changelogs, plus multi-step composites, over the Jira REST API v3 (Basic Auth with an Atlassian API token stored in the RailCall vault; egress allowlisted to *.atlassian.net and *.jira.com).\n\nWHO IT'S FOR\nEngineering teams who want an AI agent to run day-to-day Jira hygiene — triage, follow-ups, status moves, assignment, attachments, comments, labels, watchers — without raw credentials or unreviewed writes. Every mutating command is dry-run-first: RailCall previews the exact payload and requires explicit approval; each approved run yields a signed receipt.\n\nREAD (low risk)\n- getIssue — one issue by key/id (summary, status, assignee, fields).\n- searchIssues — JQL via POST /search/jql; token pagination, no total.\n- listIssueTypes — instance-wide types.\n- getTransitions — valid transitions + ids for an issue.\n- listProjects — accessible projects.\n- getProjectIssueTypes — valid types for one project (createmeta).\n- getChangelog — full change history for an issue.\n- getComments — all comments on an issue.\n- getWatchers — list watchers on an issue.\n- getComponents — project components.\n- getVersions — project versions.\n\nWRITE (medium risk, approval-gated)\n- createIssue — create; plain text auto-converted to ADF.\n- updateIssue — edit summary/description.\n- addComment — comment (ADF).\n- updateComment — edit an existing comment.\n- transitionIssue — move by transition id.\n- assignUser — by accountId or email.\n- attachFile — upload text/base64.\n- linkIssues — create a link between two issues.\n- addLabels — add labels to an issue.\n- addWatcher — add a watcher to an issue.\n- createComponent — create a project component.\n- createVersion — create a project version.\n\nCOMPOSITES (several API calls under ONE approval)\n- triageIssue — fetch context, comment, optional transition.\n- resolveWithNote — closing note + transition together.\n- cloneIssue — copy an issue into a new one.\n- bulkTransitionFromJql — transition every JQL match (per-issue outcomes).\n\nDESTRUCTIVE (high risk, approval-gated)\n- deleteIssue — delete, optionally subtasks.\n- deleteComment — delete a comment.\n- removeIssueLink — remove a link between issues.\n- removeWatcher — remove a watcher from an issue.\n\nQUICK START\n1. Token: id.atlassian.com → Security → API tokens.\n2. Studio → Integrations: add JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN.\n3. Install: railcall market install edudzi/jira\n4. Try: jira_listProjects → jira_createIssue → jira_getIssue\n\nERROR BEHAVIOR\n- Every HTTP >= 400 raises with field-level errors surfaced verbatim.\n- No write is ever retried — one shot, fail loud.\n- Issue types are project-specific; use getProjectIssueTypes to discover valid types.\n- Issue types are project-specific (Product Discovery accepts only \"Issue\").\n\ncontest:2026Q3",
+  "demo_url": "https://www.youtube.com/watch?v=310kW-WdctY",
+  "video_url": "https://www.youtube.com/watch?v=310kW-WdctY",
+  "description": "Governed Jira Cloud automation for RailCall \u2014 thirty-four commands covering the full issue lifecycle, comments, labels, watchers, components, versions, issue links, changelogs, plus multi-step composites (triage, resolve, clone, bulk-transition, bulk-assign, create-subtask, escalate), over the Jira REST API v3 (Basic Auth with an Atlassian API token stored in the RailCall vault; egress allowlisted to *.atlassian.net and *.jira.com). WHO IT'S FOR\nEngineering teams who want an AI agent to run day-to-day Jira hygiene \u2014 triage, follow-ups, status moves, assignment, attachments, comments, labels, watchers \u2014 without raw credentials or unreviewed writes. Every mutating command is dry-run-first: RailCall previews the exact payload and requires explicit approval; each approved run yields a signed receipt. READ (low risk)\n- getIssue \u2014 one issue by key/id (summary, status, assignee, fields).\n- searchIssues \u2014 JQL via POST /search/jql; token pagination, no total.\n- listIssueTypes \u2014 instance-wide types.\n- getTransitions \u2014 valid transitions + ids for an issue.\n- listProjects \u2014 accessible projects.\n- getProjectIssueTypes \u2014 valid types for one project (createmeta).\n- getChangelog \u2014 full change history for an issue.\n- getComments \u2014 all comments on an issue.\n- getWatchers \u2014 list watchers on an issue.\n- getComponents \u2014 project components.\n- getVersions \u2014 project versions. WRITE (medium risk, approval-gated)\n- createIssue \u2014 create; plain text auto-converted to ADF.\n- updateIssue \u2014 edit summary/description.\n- addComment \u2014 comment (ADF).\n- updateComment \u2014 edit an existing comment.\n- transitionIssue \u2014 move by transition id.\n- assignUser \u2014 by accountId or email.\n- attachFile \u2014 upload text/base64.\n- linkIssues \u2014 create a link between two issues.\n- addLabels \u2014 add labels to an issue.\n- addWatcher \u2014 add a watcher to an issue.\n- createComponent \u2014 create a project component.\n- createVersion \u2014 create a project version. COMPOSITES (several API calls under ONE approval)\n- triageIssue \u2014 fetch context, comment, optional transition.\n- resolveWithNote \u2014 closing note + transition together.\n- cloneIssue \u2014 copy an issue into a new one.\n- bulkTransitionFromJql \u2014 transition every JQL match (per-issue outcomes).\n- bulkAssignFromJql \u2014 search JQL, assign every result to a user.\n- createSubtask \u2014 create issue + link as child of parent.\n- escalateIssue \u2014 add comment + reassign + transition in one approval. DESTRUCTIVE (high risk, approval-gated)\n- deleteIssue \u2014 delete, optionally subtasks.\n- deleteComment \u2014 delete a comment.\n- removeIssueLink \u2014 remove a link between issues.\n- removeWatcher \u2014 remove a watcher from an issue. QUICK START\n1. Token: id.atlassian.com \u2192 Security \u2192 API tokens.\n2. Studio \u2192 Integrations: add JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN.\n3. Install: railcall market install edudzi/jira\n4. Try: jira_listProjects \u2192 jira_createIssue \u2192 jira_getIssue ERROR BEHAVIOR\n- Every HTTP >= 400 raises with field-level errors surfaced verbatim.\n- No write is ever retried \u2014 one shot, fail loud.\n- Issue types are project-specific; use getProjectIssueTypes to discover valid types.\n\ncontest:round2",
   "credential_spec": {
     "provider": "edudzi-jira",
     "category": "DevOps & Issue Tracking",
@@ -604,7 +606,7 @@
         "body": {
           "type": "string",
           "required": true,
-          "description": "New comment text (plain text → ADF)"
+          "description": "New comment text (plain text \u2192 ADF)"
         }
       },
       "output_schema": {
@@ -914,6 +916,131 @@
       "output_schema": {
         "ok": "boolean",
         "labels": "array"
+      }
+    },
+    {
+      "id": "jira.bulkAssignFromJql",
+      "title": "Bulk assign issues from JQL",
+      "provider": "edudzi-jira",
+      "risk": "high",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "jql": {
+          "type": "string",
+          "required": true,
+          "description": "JQL query to find issues"
+        },
+        "account_id": {
+          "type": "string",
+          "required": false,
+          "description": "Atlassian account ID to assign to"
+        },
+        "email": {
+          "type": "string",
+          "required": false,
+          "description": "User email (resolved to accountId)"
+        },
+        "max_results": {
+          "type": "integer",
+          "required": false,
+          "description": "Max issues to process (default 50, cap 200)"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "matched": "integer",
+        "assigned_count": "integer",
+        "failed_count": "integer"
+      }
+    },
+    {
+      "id": "jira.createSubtask",
+      "title": "Create a subtask under a parent issue",
+      "provider": "edudzi-jira",
+      "risk": "medium",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "parent_key": {
+          "type": "string",
+          "required": true,
+          "description": "Parent issue key"
+        },
+        "summary": {
+          "type": "string",
+          "required": true,
+          "description": "Subtask summary"
+        },
+        "description": {
+          "type": "string",
+          "required": false,
+          "description": "Plain-text description"
+        },
+        "issue_type": {
+          "type": "string",
+          "required": false,
+          "description": "Issue type (defaults to Sub-task)"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "parent_key": "string",
+        "child_key": "string",
+        "linked": "boolean"
+      }
+    },
+    {
+      "id": "jira.escalateIssue",
+      "title": "Escalate an issue (comment + reassign + transition)",
+      "provider": "edudzi-jira",
+      "risk": "high",
+      "mode": "write_requires_approval",
+      "requires": [
+        "jira"
+      ],
+      "preview": true,
+      "receipt_required": true,
+      "input_schema": {
+        "issue_id_or_key": {
+          "type": "string",
+          "required": true,
+          "description": "Issue key or ID"
+        },
+        "comment": {
+          "type": "string",
+          "required": true,
+          "description": "Escalation comment"
+        },
+        "account_id": {
+          "type": "string",
+          "required": false,
+          "description": "Reassign to this account ID"
+        },
+        "email": {
+          "type": "string",
+          "required": false,
+          "description": "Reassign to this email"
+        },
+        "transition_id": {
+          "type": "string",
+          "required": true,
+          "description": "Transition ID (discover via getTransitions)"
+        }
+      },
+      "output_schema": {
+        "ok": "boolean",
+        "comment_id": "string",
+        "reassigned": "boolean",
+        "escalated": "boolean"
       }
     }
   ],

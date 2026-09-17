@@ -809,5 +809,264 @@ class TestAttachFileErrorSurfacing(_HandlerTestBase):
             self.assertIn("400", str(ctx.exception))
 
 
+# ===========================================================================
+# Composite: bulkAssignFromJql
+# ===========================================================================
+
+
+class TestBulkAssignFromJql(_HandlerTestBase):
+    def test_happy_path(self):
+        """Bulk assign: search finds 2 issues, both assigned successfully."""
+        self.helpers["http_post_json"] = lambda url, payload=None, **kw: (
+            200,
+            json.dumps({"issues": [{"key": "T-1"}, {"key": "T-2"}]}).encode(),
+        )
+        self.helpers["http_patch_json"] = lambda url, payload=None, **kw: (
+            200, b"{}",
+        )
+        out, art = h.jira_bulkAssignFromJql(
+            {"jql": "project = T", "account_id": "abc123", "max_results": 10},
+            self.stamp,
+        )
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["matched"], 2)
+        self.assertEqual(out["assigned_count"], 2)
+        self.assertEqual(out["failed_count"], 0)
+        self.assertEqual(out["assigned"], ["T-1", "T-2"])
+        self.assertEqual(art["kind"], "jira.bulkAssignFromJql")
+
+    def test_partial_failure(self):
+        """One assign fails; partial results reported."""
+        self.helpers["http_post_json"] = lambda url, payload=None, **kw: (
+            200,
+            json.dumps({"issues": [{"key": "T-1"}, {"key": "T-2"}]}).encode(),
+        )
+        call_count = [0]
+        def mock_patch(url, payload=None, **kw):
+            call_count[0] += 1
+            if call_count[0] == 2:
+                # second assign fails
+                return (400, json.dumps({"errorMessages": ["permission denied"]}).encode())
+            return (200, b"{}")
+        self.helpers["http_patch_json"] = mock_patch
+
+        out, _ = h.jira_bulkAssignFromJql(
+            {"jql": "project = T", "account_id": "abc123"},
+            self.stamp,
+        )
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["assigned_count"], 1)
+        self.assertEqual(out["failed_count"], 1)
+        self.assertEqual(out["failed"][0]["key"], "T-2")
+
+    def test_missing_jql(self):
+        with self.assertRaises(RuntimeError):
+            h.jira_bulkAssignFromJql(
+                {"account_id": "abc"}, self.stamp
+            )
+
+    def test_missing_account_id_and_email(self):
+        with self.assertRaises(RuntimeError):
+            h.jira_bulkAssignFromJql(
+                {"jql": "project = T"}, self.stamp
+            )
+
+    def test_email_resolution(self):
+        """Email is resolved via user search when no account_id."""
+        self.helpers["http_get_json"] = lambda url, **kw: (
+            200,
+            json.dumps([{"accountId": "resolved123"}]).encode(),
+        )
+        self.helpers["http_post_json"] = lambda url, payload=None, **kw: (
+            200,
+            json.dumps({"issues": []}).encode(),
+        )
+        self.helpers["http_patch_json"] = lambda url, payload=None, **kw: (200, b"{}")
+
+        out, _ = h.jira_bulkAssignFromJql(
+            {"jql": "project = T", "email": "dev@test.com"},
+            self.stamp,
+        )
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["account_id"], "resolved123")
+
+
+# ===========================================================================
+# Composite: createSubtask
+# ===========================================================================
+
+
+class TestCreateSubtask(_HandlerTestBase):
+    def test_happy_path(self):
+        """Create subtask and link to parent."""
+        self.helpers["http_get_json"] = lambda url, **kw: (
+            200,
+            json.dumps({"id": "1", "key": "P-1", "self": "x",
+                        "fields": {"project": {"key": "PROJ"},
+                                   "summary": "Parent"}}).encode(),
+        )
+        post_calls = [0]
+        def mock_post(url, payload=None, **kw):
+            post_calls[0] += 1
+            if post_calls[0] == 1:
+                return (200, json.dumps({"id": "50001", "key": "PROJ-42", "self": "https://x"}).encode())
+            else:
+                return (200, json.dumps({"id": "10001"}).encode())
+        self.helpers["http_post_json"] = mock_post
+        self.helpers["http_patch_json"] = lambda url, payload=None, **kw: (200, b"{}")
+
+        out, art = h.jira_createSubtask(
+            {"parent_key": "P-1", "summary": "Fix bug in module"},
+            self.stamp,
+        )
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["parent_key"], "P-1")
+        self.assertEqual(out["child_key"], "PROJ-42")
+        self.assertTrue(out["linked"])
+        self.assertEqual(art["kind"], "jira.createSubtask")
+
+    def test_link_failure_reports_child(self):
+        """If linking fails, child key is still reported."""
+        self.helpers["http_get_json"] = lambda url, **kw: (
+            200,
+            json.dumps({"id": "1", "key": "P-1", "self": "x",
+                        "fields": {"project": {"key": "PROJ"}}}).encode(),
+        )
+        post_calls = [0]
+        def mock_post(url, payload=None, **kw):
+            post_calls[0] += 1
+            if post_calls[0] == 1:
+                return (200, json.dumps({"id": "50001", "key": "PROJ-43", "self": "https://x"}).encode())
+            else:
+                return (400, json.dumps({"errorMessages": ["link type not found"]}).encode())
+        self.helpers["http_post_json"] = mock_post
+
+        out, _ = h.jira_createSubtask(
+            {"parent_key": "P-1", "summary": "Fix module"},
+            self.stamp,
+        )
+        self.assertTrue(out["ok"])
+        self.assertFalse(out["linked"])
+        self.assertIn("child_key", out)
+
+    def test_missing_parent_key(self):
+        with self.assertRaises(RuntimeError):
+            h.jira_createSubtask(
+                {"summary": "Fix bug"}, self.stamp
+            )
+
+    def test_missing_summary(self):
+        with self.assertRaises(RuntimeError):
+            h.jira_createSubtask(
+                {"parent_key": "P-1"}, self.stamp
+            )
+
+
+# ===========================================================================
+# Composite: escalateIssue
+# ===========================================================================
+
+
+class TestEscalateIssue(_HandlerTestBase):
+    def test_happy_path(self):
+        """Full escalation: comment + reassign + transition."""
+        post_calls = [0]
+        def mock_post(url, payload=None, **kw):
+            post_calls[0] += 1
+            if "comment" in url:
+                return (200, json.dumps({"id": "20001", "self": "https://x", "created": "2026-01-01"}).encode())
+            else:
+                # transition
+                return (200, b"{}")
+        self.helpers["http_post_json"] = mock_post
+        self.helpers["http_patch_json"] = lambda url, payload=None, **kw: (200, b"{}")
+
+        out, art = h.jira_escalateIssue(
+            {
+                "issue_id_or_key": "T-1",
+                "comment": "Escalating to on-call",
+                "account_id": "lead123",
+                "transition_id": "31",
+            },
+            self.stamp,
+        )
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["id_or_key"], "T-1")
+        self.assertTrue(out["reassigned"])
+        self.assertTrue(out["escalated"])
+        self.assertEqual(art["kind"], "jira.escalateIssue")
+
+    def test_comment_failure_nothing_written(self):
+        """Comment step fails — raises immediately."""
+        self.helpers["http_post_json"] = lambda url, payload=None, **kw: (
+            400, json.dumps({"errorMessages": ["permission denied"]}).encode()
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            h.jira_escalateIssue(
+                {
+                    "issue_id_or_key": "T-1",
+                    "comment": "Escalating",
+                    "account_id": "lead123",
+                    "transition_id": "31",
+                },
+                self.stamp,
+            )
+        self.assertIn("nothing written", str(ctx.exception))
+
+    def test_transition_failure_after_comment_and_reassign(self):
+        """Comment + reassign succeed, transition fails."""
+        post_calls = [0]
+        def mock_post(url, payload=None, **kw):
+            post_calls[0] += 1
+            if post_calls[0] == 1:
+                return (200, json.dumps({"id": "20001", "self": "https://x"}).encode())
+            else:
+                return (400, json.dumps({"errorMessages": ["transition blocked"]}).encode())
+        self.helpers["http_post_json"] = mock_post
+        self.helpers["http_patch_json"] = lambda url, payload=None, **kw: (200, b"{}")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            h.jira_escalateIssue(
+                {
+                    "issue_id_or_key": "T-1",
+                    "comment": "Escalating",
+                    "account_id": "lead123",
+                    "transition_id": "31",
+                },
+                self.stamp,
+            )
+        self.assertIn("comment posted", str(ctx.exception))
+        self.assertIn("reassigned", str(ctx.exception))
+        self.assertIn("transition failed", str(ctx.exception))
+
+    def test_missing_issue_key(self):
+        with self.assertRaises(RuntimeError):
+            h.jira_escalateIssue(
+                {"comment": "x", "account_id": "y", "transition_id": "31"},
+                self.stamp,
+            )
+
+    def test_missing_comment(self):
+        with self.assertRaises(RuntimeError):
+            h.jira_escalateIssue(
+                {"issue_id_or_key": "T-1", "account_id": "y", "transition_id": "31"},
+                self.stamp,
+            )
+
+    def test_missing_transition_id(self):
+        with self.assertRaises(RuntimeError):
+            h.jira_escalateIssue(
+                {"issue_id_or_key": "T-1", "comment": "x", "account_id": "y"},
+                self.stamp,
+            )
+
+    def test_missing_reassign_target(self):
+        with self.assertRaises(RuntimeError):
+            h.jira_escalateIssue(
+                {"issue_id_or_key": "T-1", "comment": "x", "transition_id": "31"},
+                self.stamp,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

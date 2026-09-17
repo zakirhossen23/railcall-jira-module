@@ -258,3 +258,70 @@ Version & publish
   railcall market module sign edudzi-jira    # sig: c6a5fc48...
   railcall market module verify edudzi-jira  # ✓ signature valid, 31 commands
   railcall market publish edudzi-jira        # published v0.5.0
+
+---------------------------------------------------------------------------
+v0.6.0 — Final round: 3 additional composites (API depth scoring) (2026-09-17)
+---------------------------------------------------------------------------
+Date: 2026-09-17
+
+Three new composite handlers added to close gaps flagged in the final
+review round:
+
+1. jira_bulkAssignFromJql() — search JQL, then assign every matched issue
+   to a user. Reports per-issue outcomes (assigned/failed) like
+   bulkTransitionFromJql. Resolves email→accountId if needed.
+
+2. jira_createSubtask() — creates an issue, then links it as a subtask of
+   a parent using linkIssues with "Parent" type. Reports created child
+   key even if linking fails.
+
+3. jira_escalateIssue() — multi-step escalation under one approval:
+   addComment + assignUser + transitionIssue. Each step's failure is
+   reported with exactly what landed before it.
+
+Version & publish
+-----------------
+  version 0.5.0 → 0.6.0
+  34 commands total (31 original + 3 new composites)
+  railcall market module sign edudzi-jira    # sig: 2955a318 (final after demo_url + contest:round2)
+  railcall market module verify edudzi-jira  # ✓ signature valid, v0.6.0, v2 tree, 34 commands
+  railcall market publish edudzi-jira        # https://railcall.ai/marketplace/edudzi/jira — live
+
+Files changed (7) — vs 2947d17 (v0.5.0)
+--------------------------------------
+  M  README.md                        (+9 / -2)   31 → 34 commands, Demo video URL
+  M  changes.md                       (+49 / -1)  v0.6.0 notes + dates
+  M  edudzi-jira/handlers/handler.py  (+215 / -1) 3 composites, bulkAssign email fix
+  M  edudzi-jira/manifest.json        (+135 / -4) v0.6.0, demo_url/video_url, contest:round2
+  M  edudzi-jira/module.json          (+131 / -4) synced identical with manifest.json
+  M  edudzi-jira/module.sig           (re-signed) v2 tree, publisher 546d605f…
+  M  edudzi-jira/test/test_jira.py    (+259 / -0) fix 8 tests
+
+What changed
+------------
+  Handler (handler.py):
+    - New: jira_bulkAssignFromJql — search JQL + assign each result, per-issue outcomes
+    - New: jira_createSubtask — create issue + link as Parent subtask, reports child on link failure
+    - New: jira_escalateIssue — comment + reassign + transition in one approval
+    - Fix: bulkAssign email→accountId now direct _request GET /user/search (removed _resolve_only_ hack)
+
+  Manifest (manifest.json + module.json, kept identical):
+    - version 0.5.0 → 0.6.0, 31 → 34 commands
+    - added demo_url + video_url: https://www.youtube.com/watch?v=310kW-WdctY
+    - description tag: contest:2026Q3 → contest:round2 (kept 1,500–3,000 chars)
+
+  Docs (README.md):
+    - title 31 → 34 commands, command table + verify line updated
+    - added Demo video line under header
+
+  Tests (test_jira.py):
+    - Fixed 8 tests (bulkAssign 3, createSubtask 2, escalate 3) — now use builtins.__rc_helpers__ + (status, body) tuples
+    - 71 existing tests unchanged (vault, base_url, auth, parse, fail, adf + 17 handlers)
+
+Verification
+------------
+  python3 -m py_compile handler.py          # OK
+  python3 -m unittest edudzi-jira.test.test_jira -v  # Ran 79 tests — OK
+  railcall market module sign edudzi-jira   # 7 files, sha256 tree, sig 2955a318…
+  railcall market module verify edudzi-jira # ✓ signature valid, v0.6.0, 34 commands
+  railcall market publish edudzi-jira       # published, live at /marketplace/edudzi/jira

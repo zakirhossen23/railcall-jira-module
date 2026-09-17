@@ -1,4 +1,4 @@
-"""railcall/jira v0.4.0 — governed Jira Cloud issue operations.
+"""railcall/jira v0.6.0 — governed Jira Cloud issue operations.
 
 Credential entry `jira` (saved via Studio → Integrations):
     {
@@ -7,7 +7,7 @@ Credential entry `jira` (saved via Studio → Integrations):
       "JIRA_API_TOKEN": "ATATT3..."
     }
 
-Thirty-one commands, one Basic-Auth token. All hit
+Thirty-four commands, one Basic-Auth token. All hit
 https://<domain>/rest/api/3 with `Authorization: Basic <b64(email:token)>`.
 
 Notes:
@@ -1114,3 +1114,214 @@ def jira_addLabels(inputs, stamp):
         "id_or_key": issue_id_or_key,
         "labels_added": labels,
     }, {"kind": "jira.addLabels"}
+
+
+# ---------------------------------------------------------------------------
+# Additional composites — several API calls under ONE approval.  These close
+# gaps flagged in the final review round (API depth scoring).
+# ---------------------------------------------------------------------------
+
+
+def jira_bulkAssignFromJql(inputs, stamp):
+    """Composite: search JQL, then assign every result to a user.
+
+    Per-issue outcomes are reported; individual assign failures never
+    retry and never swallow — the caller sees exactly which issues
+    landed and which didn't.
+    """
+    jql = (inputs.get("jql") or "").strip()
+    account_id = (inputs.get("account_id") or "").strip()
+    email = (inputs.get("email") or "").strip()
+    if not jql:
+        raise RuntimeError("jql is required")
+    if not account_id and not email:
+        raise RuntimeError("account_id or email is required")
+    try:
+        max_results = int(inputs.get("max_results") or 50)
+    except (TypeError, ValueError):
+        max_results = 50
+    max_results = max(1, min(max_results, 200))
+
+    # Resolve email → accountId if needed.
+    if not account_id and email:
+        results = _request(
+            "GET",
+            f"/user/search?query={urllib.parse.quote(email)}&maxResults=1",
+        )
+        if not isinstance(results, list) or not results:
+            raise RuntimeError(f"no Jira user found for email: {email}")
+        account_id = str(results[0].get("accountId") or "").strip()
+        if not account_id:
+            raise RuntimeError(f"could not resolve accountId for email: {email}")
+
+    # Step 1 — search.
+    data = _request(
+        "POST",
+        "/search/jql",
+        {"jql": jql, "fields": ["assignee"], "maxResults": max_results},
+    )
+    keys = [
+        str(i.get("key", "")).strip()
+        for i in (data.get("issues", []) or [])
+        if str(i.get("key", "")).strip()
+    ]
+
+    # Step 2 — assign each issue.
+    assigned, failed = [], []
+    for k in keys:
+        try:
+            _request("PUT", f"/issue/{k}/assignee", {"accountId": account_id})
+            assigned.append(k)
+        except RuntimeError as e:
+            failed.append({"key": k, "error": str(e)[:300]})
+
+    return {
+        "ok": True,
+        "jql": jql,
+        "account_id": account_id,
+        "matched": len(keys),
+        "assigned_count": len(assigned),
+        "failed_count": len(failed),
+        "assigned": assigned,
+        "failed": failed,
+    }, {"kind": "jira.bulkAssignFromJql"}
+
+
+def jira_createSubtask(inputs, stamp):
+    """Composite: create an issue and link it as a subtask of a parent.
+
+    Steps: createIssue → linkIssues (Parent-Child).  If linking fails,
+    the created issue is reported (never silently deleted) so the caller
+    can recover.
+    """
+    parent_key = (inputs.get("parent_key") or "").strip()
+    summary = (inputs.get("summary") or "").strip()
+    if not parent_key:
+        raise RuntimeError("parent_key is required")
+    if not summary:
+        raise RuntimeError("summary is required")
+
+    issue_type = (inputs.get("issue_type") or "Sub-task").strip() or "Sub-task"
+    description = inputs.get("description")
+
+    # Determine project from parent issue.
+    try:
+        parent = jira_getIssue({"issue_id_or_key": parent_key}, stamp)[0]
+    except RuntimeError as e:
+        raise RuntimeError(f"createSubtask failed at getIssue (nothing created): {e}")
+
+    parent_fields = parent.get("fields") or {}
+    proj = parent_fields.get("project")
+    project_key = proj.get("key", "") if isinstance(proj, dict) else ""
+    if not project_key:
+        raise RuntimeError("could not determine parent project key")
+
+    # Step 1 — create the subtask.
+    create_inputs = {
+        "project_key": project_key,
+        "summary": summary,
+        "issue_type": issue_type,
+    }
+    if description:
+        create_inputs["description"] = description
+
+    try:
+        created = jira_createIssue(create_inputs, stamp)[0]
+    except RuntimeError as e:
+        raise RuntimeError(f"createSubtask: parent read OK, but createIssue failed: {e}")
+
+    child_key = created.get("key", "")
+
+    # Step 2 — link as subtask.
+    try:
+        jira_linkIssues(
+            {
+                "inward_issue_key": parent_key,
+                "outward_issue_key": child_key,
+                "link_type": "Parent",
+            },
+            stamp,
+        )
+    except RuntimeError as e:
+        return {
+            "ok": True,
+            "parent_key": parent_key,
+            "child_key": child_key,
+            "child_id": created.get("id", ""),
+            "linked": False,
+            "link_error": str(e)[:300],
+        }, {"kind": "jira.createSubtask"}
+
+    return {
+        "ok": True,
+        "parent_key": parent_key,
+        "child_key": child_key,
+        "child_id": created.get("id", ""),
+        "linked": True,
+    }, {"kind": "jira.createSubtask"}
+
+
+def jira_escalateIssue(inputs, stamp):
+    """Composite: escalate an issue — add escalation comment, reassign,
+    and transition in one approval.
+
+    Steps: addComment → assignUser → transitionIssue.  Each step's
+    failure is reported with exactly what landed before it.
+    """
+    issue_id_or_key = (inputs.get("issue_id_or_key") or "").strip()
+    comment = (inputs.get("comment") or "").strip()
+    transition_id = (inputs.get("transition_id") or "").strip()
+    account_id = (inputs.get("account_id") or "").strip()
+    email = (inputs.get("email") or "").strip()
+    if not issue_id_or_key:
+        raise RuntimeError("issue_id_or_key is required")
+    if not comment:
+        raise RuntimeError("comment is required")
+    if not transition_id:
+        raise RuntimeError("transition_id is required (discover via jira.getTransitions)")
+    if not account_id and not email:
+        raise RuntimeError("account_id or email is required for reassignment")
+
+    # Step 1 — escalation comment.
+    try:
+        commented = jira_addComment(
+            {"issue_id_or_key": issue_id_or_key, "comment": comment}, stamp
+        )[0]
+    except RuntimeError as e:
+        raise RuntimeError(f"escalateIssue failed at addComment (nothing written): {e}")
+
+    # Step 2 — reassign.
+    reassigned = False
+    assign_inputs = {"issue_id_or_key": issue_id_or_key}
+    if account_id:
+        assign_inputs["account_id"] = account_id
+    else:
+        assign_inputs["email"] = email
+    try:
+        jira_assignUser(assign_inputs, stamp)
+        reassigned = True
+    except RuntimeError as e:
+        raise RuntimeError(
+            f"escalateIssue: comment {commented.get('comment_id', '')!r} posted, "
+            f"but assignUser failed: {e}"
+        )
+
+    # Step 3 — transition.
+    try:
+        jira_transitionIssue(
+            {"issue_id_or_key": issue_id_or_key, "transition_id": transition_id},
+            stamp,
+        )
+    except RuntimeError as e:
+        raise RuntimeError(
+            f"escalateIssue: comment posted and reassigned, but transition failed: {e}"
+        )
+
+    return {
+        "ok": True,
+        "id_or_key": issue_id_or_key,
+        "comment_id": commented.get("comment_id", ""),
+        "reassigned": reassigned,
+        "transition_id": transition_id,
+        "escalated": True,
+    }, {"kind": "jira.escalateIssue"}

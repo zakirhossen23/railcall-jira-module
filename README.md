@@ -1,12 +1,14 @@
 # edudzi-jira — RailCall Jira module
 
 A Python module for [RailCall](https://railcall.ai) that wraps the **Jira Cloud
-REST API v3**. Thirty-one commands — create, update, search, transition, comment,
+REST API v3**. Thirty-four commands — create, update, search, transition, comment,
 assign, attach, delete, link, label, watch, plus changelogs, components,
 versions, and multi-step composites — all governed by RailCall's dry-run-first,
 approval-gated automation.
 
 **Install and use in ~5 minutes.**
+
+**Demo video:** https://www.youtube.com/watch?v=310kW-WdctY
 
 ## What you get
 
@@ -43,6 +45,9 @@ approval-gated automation.
 | `jira.resolveWithNote` | **Composite:** closing note + transition in one approval | medium |
 | `jira.cloneIssue` | **Composite:** copy an issue into a new one | medium |
 | `jira.bulkTransitionFromJql` | **Composite:** transition every JQL match (per-issue outcomes) | high |
+| `jira.bulkAssignFromJql` | **Composite:** search JQL, assign every result to a user | high |
+| `jira.createSubtask` | **Composite:** create issue + link as child of parent | medium |
+| `jira.escalateIssue` | **Composite:** comment + reassign + transition in one approval | high |
 
 ## Prerequisites
 
@@ -80,7 +85,7 @@ railcall doctor          # environment health
 railcall demo            # golden path: build → signed receipt → verify
 ```
 
-In Studio → Modules, `edudzi-jira` should show **loaded** with 31 commands.
+In Studio → Modules, `edudzi-jira` should show **loaded** with 34 commands.
 
 ## Use it (2 minutes)
 
